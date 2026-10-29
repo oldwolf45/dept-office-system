@@ -1,0 +1,21 @@
+services:
+  api:
+    build: ./backend
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./data:/app/data
+    env_file:
+      - .env
+    environment:
+      PORT: "3000"
+      DATA_DIR: /app/data
+    restart: unless-stopped
+
+  web:
+    build: ./frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      - api
+    restart: unless-stopped

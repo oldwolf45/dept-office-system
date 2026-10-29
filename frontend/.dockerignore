@@ -1,0 +1,13 @@
+# 构建上下文排除：避免宿主机（Windows 平台）node_modules 覆盖镜像内安装的依赖
+# （vite/esbuild 含平台相关二进制，拷贝错平台会导致镜像内 build 失败）
+node_modules
+dist
+.env
+.env.*
+coverage
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+.git
+.gitignore
