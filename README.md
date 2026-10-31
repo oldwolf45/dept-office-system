@@ -85,6 +85,7 @@ npm run build
 ## 📚 文档
 
 - [部署手册.md](部署手册.md) — Docker 与单机 Node 两条部署路径详解
+- [HTTPS.md](HTTPS.md) — HTTPS 自签证书配置指南（公网部署必读）
 - [用户手册.md](用户手册.md) — 按角色的日常操作说明
 - [功能清单.md](功能清单.md) — 功能模块 × 角色权限对照表
 
@@ -135,4 +136,5 @@ npm run build
 <p align="center">
   如果觉得有用，点个 ⭐ Star 支持一下吧！
 </p>
+
 
