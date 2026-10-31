@@ -1,4 +1,10 @@
 import request from './request'
+
+/** 列表接口统一解包：后端返回 {code,data:{list:[...]}}，此处取 list 并兜底空数组 */
+async function getList<T>(url: string, params?: Record<string, string>): Promise<T[]> {
+  const r = await request.get<unknown, { list?: T[] }>(url, params ? { params } : undefined)
+  return r.list ?? []
+}
 import type {
   AccountingApproval,
   Bookkeeper,
@@ -35,7 +41,7 @@ export function assignBookkeeper(userId: number): Promise<null> {
 }
 
 export function getDelegations(): Promise<Delegation[]> {
-  return request.get<unknown, Delegation[]>('/accounting/delegations')
+  return getList<Delegation>('/accounting/delegations')
 }
 
 export function createDelegation(data: CreateDelegationParams): Promise<{ id: number }> {
@@ -50,7 +56,7 @@ export function revokeDelegation(id: number): Promise<null> {
 
 /** 物品列表（可从历史选择或新增） */
 export function getItems(): Promise<MaterialItem[]> {
-  return request.get<unknown, MaterialItem[]>('/accounting/items')
+  return getList<MaterialItem>('/accounting/items')
 }
 
 export function createItem(data: CreateMaterialItemParams): Promise<MaterialItem> {
@@ -63,7 +69,7 @@ export function updateItemMinStock(id: number, minStock: number): Promise<Materi
 
 /** 物料月度计划（编制/追加） */
 export function getPlans(month: string): Promise<MaterialPlan[]> {
-  return request.get<unknown, MaterialPlan[]>('/accounting/plans', { params: { month } })
+  return getList<MaterialPlan>('/accounting/plans', { month })
 }
 
 export function createPlan(data: CreateMaterialPlanParams): Promise<MaterialPlan> {
@@ -72,7 +78,7 @@ export function createPlan(data: CreateMaterialPlanParams): Promise<MaterialPlan
 
 /** 领用登记 */
 export function getReceipts(month: string): Promise<MaterialReceipt[]> {
-  return request.get<unknown, MaterialReceipt[]>('/accounting/receipts', { params: { month } })
+  return getList<MaterialReceipt>('/accounting/receipts', { month })
 }
 
 export function createReceipt(data: CreateReceiptParams): Promise<MaterialReceipt> {
@@ -86,7 +92,7 @@ export function voidReceipt(id: number, voidReason: string): Promise<null> {
 
 /** 发放登记（超待发放后端拒绝 4000，C25） */
 export function getIssues(month: string): Promise<MaterialIssue[]> {
-  return request.get<unknown, MaterialIssue[]>('/accounting/issues', { params: { month } })
+  return getList<MaterialIssue>('/accounting/issues', { month })
 }
 
 export function createIssue(data: CreateIssueParams): Promise<MaterialIssue> {
@@ -99,19 +105,19 @@ export function voidIssue(id: number, voidReason: string): Promise<null> {
 
 /** 结存视图（含库存预警，C29） */
 export function getStock(month: string): Promise<StockRow[]> {
-  return request.get<unknown, StockRow[]>('/accounting/stock', { params: { month } })
+  return getList<StockRow>('/accounting/stock', { month })
 }
 
 /** 我的物品（C26：仅本人视角，科员可访问） */
 export function getMyItems(): Promise<MyItem[]> {
-  return request.get<unknown, MyItem[]>('/accounting/my-items')
+  return getList<MyItem>('/accounting/my-items')
 }
 
 // ---------- 盘点（C30） ----------
 
 /** 盘点单列表（按月份；契约 §7 未列 GET，按后端惯例扩展，失败兜底为空） */
 export function getStocktakingList(month: string): Promise<Stocktaking[]> {
-  return request.get<unknown, Stocktaking[]>('/accounting/stocktaking', { params: { month } })
+  return getList<Stocktaking>('/accounting/stocktaking', { month })
 }
 
 export function createStocktaking(month: string): Promise<Stocktaking> {
@@ -142,7 +148,7 @@ export function createModifyRequest(data: CreateModifyRequestParams): Promise<Ac
 
 /** 待确认列表（记账员看发起记录；科长/副科长可见待办） */
 export function getApprovals(): Promise<AccountingApproval[]> {
-  return request.get<unknown, AccountingApproval[]>('/accounting/approvals')
+  return getList<AccountingApproval>('/accounting/approvals')
 }
 
 export function approveApproval(id: number, confirmNote?: string): Promise<AccountingApproval> {
@@ -160,7 +166,7 @@ export function rejectApproval(id: number, confirmNote?: string): Promise<Accoun
 // ---------- S9：资金账与挂账 ----------
 
 export function getFundPlans(month: string): Promise<FundPlan[]> {
-  return request.get<unknown, FundPlan[]>('/accounting/fund-plans', { params: { month } })
+  return getList<FundPlan>('/accounting/fund-plans', { month })
 }
 
 export function createFundPlan(data: CreateFundPlanParams): Promise<FundPlan> {
@@ -168,7 +174,7 @@ export function createFundPlan(data: CreateFundPlanParams): Promise<FundPlan> {
 }
 
 export function getExpenses(month: string): Promise<FundExpense[]> {
-  return request.get<unknown, FundExpense[]>('/accounting/expenses', { params: { month } })
+  return getList<FundExpense>('/accounting/expenses', { month })
 }
 
 export function createExpense(data: CreateExpenseParams): Promise<FundExpense> {
@@ -186,5 +192,5 @@ export function voidExpense(id: number, voidReason: string): Promise<null> {
 
 /** 挂账清单（含挂账天数与超30天标记，C22） */
 export function getLedger(): Promise<LedgerRow[]> {
-  return request.get<unknown, LedgerRow[]>('/accounting/ledger')
+  return getList<LedgerRow>('/accounting/ledger')
 }

@@ -92,16 +92,88 @@ export const listReports = wrap(async (req, res) => {
 });
 
 // GET /api/reports/:month/:type
+
+// 前端契约类型（ReportType）→ 存储 report_type 映射 + 表格模型转换（columns/rows）
+const REPORT_TYPE_ALIAS = {
+  material_plan: 'material',
+  fund_execution: 'fund',
+  person_work: 'work',
+  material: 'material',
+  fund: 'fund',
+  ledger: 'ledger',
+  work: 'work'
+};
+
+function toReportTable(requestedType, storedType, data) {
+  if (!data) return { reportType: requestedType, columns: [], rows: [] };
+  if (storedType === 'material') {
+    return {
+      reportType: requestedType,
+      columns: [
+        { prop: 'name', label: '物品' }, { prop: 'unit', label: '单位' },
+        { prop: 'opening', label: '月初结存' }, { prop: 'plannedQty', label: '本月计划' },
+        { prop: 'received', label: '本月入库' }, { prop: 'issued', label: '本月领用' },
+        { prop: 'ending', label: '月末结存' }, { prop: 'pendingIssue', label: '待发放' },
+        { prop: 'warning', label: '预警' }
+      ],
+      rows: (Array.isArray(data) ? data : []).map((r) => ({ ...r, warning: r.warning ? '是' : '' }))
+    };
+  }
+  if (storedType === 'fund') {
+    return {
+      reportType: requestedType,
+      columns: [
+        { prop: 'item', label: '事项' }, { prop: 'plannedAmount', label: '计划金额' },
+        { prop: 'actual', label: '实际支出' }, { prop: 'balance', label: '结余' }, { prop: 'remark', label: '备注' }
+      ],
+      rows: (Array.isArray(data.plans) ? data.plans : []).map((p) => ({
+        item: p.item ?? p.itemName ?? '',
+        plannedAmount: p.plannedAmount ?? p.amount ?? 0,
+        actual: p.actual ?? 0,
+        balance: (p.plannedAmount ?? p.amount ?? 0) - (p.actual ?? 0),
+        remark: p.remark ?? ''
+      }))
+    };
+  }
+  if (storedType === 'ledger') {
+    return {
+      reportType: requestedType,
+      columns: [
+        { prop: 'expenseNo', label: '单号' }, { prop: 'item', label: '事项' },
+        { prop: 'amount', label: '金额' }, { prop: 'expenseDate', label: '发生日期' },
+        { prop: 'remaining', label: '剩余' }, { prop: 'days', label: '挂账天数' },
+        { prop: 'settleStatus', label: '状态' }
+      ],
+      rows: (Array.isArray(data.items) ? data.items : []).map((r) => ({ ...r, settleStatus: r.over30 ? `${r.settleStatus}·超30天` : r.settleStatus }))
+    };
+  }
+  if (storedType === 'work') {
+    return {
+      reportType: requestedType,
+      columns: [
+        { prop: 'userNo', label: '工号' }, { prop: 'name', label: '姓名' },
+        { prop: 'should', label: '应完成' }, { prop: 'completed', label: '已完成' },
+        { prop: 'undone', label: '未完成' }, { prop: 'overdue', label: '逾期' }
+      ],
+      rows: (Array.isArray(data) ? data : []).map((r) => ({ ...r, personId: r.userId }))
+    };
+  }
+  return { reportType: requestedType, columns: [], rows: [] };
+}
+
 export const getReport = wrap(async (req, res) => {
   const { month, type } = req.params;
   if (!validMonth(month)) return fail(res, 4000, '月份格式错误');
+  const storedType = REPORT_TYPE_ALIAS[type] || type;
   const row = db.prepare(
     `SELECT * FROM monthly_reports WHERE dept_code=? AND month=? AND report_type=?`
-  ).get(req.currentUser.deptCode, month, type);
-  if (!row) return ok(res, { month, type, data: null, generated: false });
+  ).get(req.currentUser.deptCode, month, storedType);
+  if (!row) return ok(res, { month, type, reportType: type, generated: false, locked: false, columns: [], rows: [] });
+  const raw = row.data_json ? JSON.parse(row.data_json) : null;
+  const table = toReportTable(type, storedType, raw);
   return ok(res, {
-    month, type, locked: row.locked === 1, generated: true,
-    data: row.data_json ? JSON.parse(row.data_json) : null,
+    month, type, reportType: type, locked: row.locked === 1, generated: true,
+    columns: table.columns, rows: table.rows,
     summaryText: row.summary_text, isSampleCandidate: row.is_sample_candidate === 1
   });
 });
