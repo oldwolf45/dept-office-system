@@ -37,7 +37,7 @@
 
 ## 🚀 快速开始
 
-### 方式一：Docker（推荐，30 秒启动）
+### 方式一：Docker（推荐，一条命令）
 
 要求：装有 Docker 与 Docker Compose 的服务器（Linux / Windows / macOS 均可）。
 
@@ -50,11 +50,13 @@ cd dept-office-system
 cp .env.example .env
 # 编辑 .env，设置 JWT_SECRET（随机长串，>=32 位）
 
-# 启动
+# 启动（首次构建需几分钟，之后秒级启动）
 docker compose up -d --build
 ```
 
 浏览器打开 `http://服务器IP:8080`，首次访问自动进入"创建系统管理员"引导页。
+
+> 首次启动会自动生成临时自签证书并启用 HTTPS（跳转 `https://服务器IP:8443`）。公网正式使用请按 [HTTPS.md](HTTPS.md) 替换为自己的证书。
 
 ### 方式二：单机 Node
 
