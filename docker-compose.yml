@@ -8,6 +8,8 @@ services:
     environment:
       PORT: "3000"
       DATA_DIR: /app/data
+      # 发行模式：不预置种子账号，0 账号时走网页引导（部署手册要求）。缺省会去 import 私有 seed-data.js 导致启动崩溃
+      DISTRIBUTION_MODE: ${DISTRIBUTION_MODE:-1}
       JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me}
       MINIMAX_API_KEY: ${MINIMAX_API_KEY:-}
     restart: unless-stopped
