@@ -23,7 +23,9 @@ const loading = ref(false)
 
 const inStock = computed(() => all.value.filter((m) => m.status === 'in_stock'))
 const issuedMats = computed(() => all.value.filter((m) => m.status === 'issued'))
-const disposable = computed(() => all.value.filter((m) => m.status === 'issued' || m.status === 'recycled'))
+// 可处置范围须与后端状态机一致：in_stock→disposed 合法（canTransitionMaterial）
+// 此前只放了 issued/recycled，导致「在库材料无法直接报废」，得先领用再处置
+const disposable = computed(() => all.value.filter((m) => ['in_stock', 'issued', 'recycled'].includes(m.status)))
 
 function todayStr(): string {
   const d = new Date()
