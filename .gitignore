@@ -6,6 +6,9 @@ dist/
 
 # runtime data (SQLite db, uploads, backups)
 data/
+*.db
+*.sqlite
+*.sqlite3
 
 # env files
 .env
