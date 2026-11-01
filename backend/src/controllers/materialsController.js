@@ -1,6 +1,7 @@
 import { ok, fail } from '../middleware/response.js';
 import materialsModel from '../models/materialsModel.js';
 import logModel from '../models/logModel.js';
+import { nextDocNo } from '../services/materialsService.js';
 
 // GET /api/materials/me —— 当前用户材料模块访问态与角色（前端渲染工作区壳的依据）
 export async function me(req, res) {
@@ -136,4 +137,109 @@ export async function enableFinanceCategory(req, res) {
   const id = Number(req.params.id);
   if (!materialsModel.findFinanceCategoryById(id)) return fail(res, 4040, '收支分类不存在');
   return ok(res, materialsModel.setFinanceCategoryStatus(id, 'active'));
+}
+
+// ============ 计划管理（T2）============
+// POST /api/materials/plans —— 工段长/科室经办填报（草稿）
+export async function createPlan(req, res) {
+  const me = req.currentUser;
+  const body = req.body || {};
+  const month = String(body.month || '').trim();
+  const planType = body.planType === 'section' ? 'section' : 'workshop';
+  const unitCode = String(body.unitCode || '').trim();
+  const unitName = String(body.unitName || '').trim();
+  const items = Array.isArray(body.items) ? body.items : [];
+  if (!/^\d{4}-\d{2}$/.test(month)) return fail(res, 4000, '月份格式应为 YYYY-MM');
+  if (!unitCode || !unitName) return fail(res, 4000, '请填写单位编码与名称');
+  if (!items.length) return fail(res, 4000, '计划至少包含一条物料');
+  const planNo = nextDocNo('plans', 'plan_no', 'JH');
+  const plan = materialsModel.createPlan({ planNo, month, planType, unitCode, unitName, createdBy: me.id });
+  for (const it of items) {
+    const name = String(it.materialName || '').trim();
+    const qty = Number(it.plannedQty) || 0;
+    const price = Number(it.referencePrice) || 0;
+    if (!name) return fail(res, 4000, '物料名称不能为空');
+    if (qty <= 0) return fail(res, 4000, `物料「${name}」数量须大于0`);
+    materialsModel.addPlanItem({
+      planId: plan.id,
+      categoryId: it.categoryId ? Number(it.categoryId) : null,
+      materialName: name,
+      plannedQty: qty,
+      referencePrice: price
+    });
+  }
+  logModel.addOperationLog({
+    operatorId: me.id, operatorName: me.name, actionType: 'create_plan',
+    targetType: 'plan', targetId: plan.id, detail: { planNo, planType, unitName, month }
+  });
+  return ok(res, { ...plan, items: materialsModel.listPlanItems(plan.id) }, '已创建计划（草稿）');
+}
+
+// GET /api/materials/plans?month=&planType=&status=
+export async function listPlans(req, res) {
+  const month = String(req.query.month || '');
+  const planType = String(req.query.planType || '');
+  const status = String(req.query.status || '');
+  return ok(res, { list: materialsModel.listPlans({ month, planType, status }) });
+}
+
+// GET /api/materials/plans/:id
+export async function getPlan(req, res) {
+  const id = Number(req.params.id);
+  const plan = materialsModel.findPlan(id);
+  if (!plan) return fail(res, 4040, '计划不存在');
+  return ok(res, { ...plan, items: materialsModel.listPlanItems(id) });
+}
+
+// POST /api/materials/plans/:id/submit  draft→submitted
+export async function submitPlan(req, res) {
+  const me = req.currentUser;
+  const id = Number(req.params.id);
+  const plan = materialsModel.findPlan(id);
+  if (!plan) return fail(res, 4040, '计划不存在');
+  if (plan.status !== 'draft') return fail(res, 4000, '仅草稿可提交');
+  const updated = materialsModel.updatePlanStatus(id, 'submitted');
+  logModel.addOperationLog({ operatorId: me.id, operatorName: me.name, actionType: 'submit_plan', targetType: 'plan', targetId: id });
+  return ok(res, updated, '已提交');
+}
+
+// POST /api/materials/plans/:id/approve  submitted→approved（主任/科长审核；角色门禁 T10）
+export async function approvePlan(req, res) {
+  const me = req.currentUser;
+  const id = Number(req.params.id);
+  const plan = materialsModel.findPlan(id);
+  if (!plan) return fail(res, 4040, '计划不存在');
+  if (plan.status !== 'submitted') return fail(res, 4000, '仅已提交计划可审核');
+  const updated = materialsModel.updatePlanStatus(id, 'approved');
+  logModel.addOperationLog({ operatorId: me.id, operatorName: me.name, actionType: 'approve_plan', targetType: 'plan', targetId: id });
+  return ok(res, updated, '已通过');
+}
+
+// POST /api/materials/plans/:id/reject  submitted→rejected（驳回必填意见）
+export async function rejectPlan(req, res) {
+  const me = req.currentUser;
+  const id = Number(req.params.id);
+  const plan = materialsModel.findPlan(id);
+  if (!plan) return fail(res, 4040, '计划不存在');
+  if (plan.status !== 'submitted') return fail(res, 4000, '仅已提交计划可审核');
+  const reason = String((req.body || {}).reason || '').trim();
+  if (!reason) return fail(res, 4000, '驳回须填写意见');
+  const updated = materialsModel.updatePlanStatus(id, 'rejected', reason);
+  logModel.addOperationLog({ operatorId: me.id, operatorName: me.name, actionType: 'reject_plan', targetType: 'plan', targetId: id, detail: { reason } });
+  return ok(res, updated, '已驳回');
+}
+
+// GET /api/materials/plans/summary?month=  供应科全厂汇总（车间+科室）
+export async function summaryPlans(req, res) {
+  const month = String(req.query.month || '');
+  if (!month) return fail(res, 4000, '请指定月份');
+  const all = materialsModel.listPlans({ month });
+  const byUnit = {};
+  for (const p of all) {
+    if (!byUnit[p.unitName]) byUnit[p.unitName] = { unitName: p.unitName, planType: p.planType, count: 0, approved: 0, rejected: 0 };
+    byUnit[p.unitName].count += 1;
+    if (p.status === 'approved') byUnit[p.unitName].approved += 1;
+    if (p.status === 'rejected') byUnit[p.unitName].rejected += 1;
+  }
+  return ok(res, { month, total: all.length, plans: all, byUnit: Object.values(byUnit) });
 }

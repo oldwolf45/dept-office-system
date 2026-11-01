@@ -122,6 +122,12 @@ const router = createRouter({
           component: () => import('@/views/materials/FinanceCategoryView.vue'),
           meta: { menu: 'materials' }
         },
+        {
+          path: 'materials/plans',
+          name: 'materials-plans',
+          component: () => import('@/views/materials/PlanView.vue'),
+          meta: { menu: 'materials' }
+        },
         { path: '', redirect: '/dashboard' }
       ]
     }

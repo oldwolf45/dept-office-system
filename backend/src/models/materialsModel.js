@@ -117,6 +117,60 @@ const materialsModel = {
   setFinanceCategoryStatus(id, status) {
     db.prepare(`UPDATE finance_categories SET status = ?, updated_at = datetime('now','localtime') WHERE id = ? AND deleted_at IS NULL`).run(status, id);
     return this.findFinanceCategoryById(id);
+  },
+
+  // ---- 计划（T2）----
+  createPlan({ planNo, month, planType, unitCode, unitName, createdBy }) {
+    const info = db.prepare(
+      `INSERT INTO plans (plan_no, month, plan_type, unit_code, unit_name, status, created_by)
+       VALUES (?, ?, ?, ?, ?, 'draft', ?)`
+    ).run(planNo, month, planType, unitCode, unitName, createdBy);
+    return this.findPlan(Number(info.lastInsertRowid));
+  },
+
+  findPlan(id) {
+    return db.prepare(
+      `SELECT id, plan_no AS planNo, month, plan_type AS planType, unit_code AS unitCode, unit_name AS unitName,
+              status, reject_reason AS rejectReason, created_by AS createdBy, created_at AS createdAt, updated_at AS updatedAt
+       FROM plans WHERE id = ? AND deleted_at IS NULL`
+    ).get(id);
+  },
+
+  addPlanItem({ planId, categoryId, materialName, plannedQty, referencePrice }) {
+    const amount = Number(plannedQty) * Number(referencePrice);
+    db.prepare(
+      `INSERT INTO plan_items (plan_id, category_id, material_name, planned_qty, reference_price, planned_amount)
+       VALUES (?, ?, ?, ?, ?, ?)`
+    ).run(planId, categoryId ?? null, materialName, plannedQty, referencePrice, amount);
+  },
+
+  listPlanItems(planId) {
+    return db.prepare(
+      `SELECT id, plan_id AS planId, category_id AS categoryId, material_name AS materialName,
+              planned_qty AS plannedQty, reference_price AS referencePrice, planned_amount AS plannedAmount
+       FROM plan_items WHERE plan_id = ? AND deleted_at IS NULL ORDER BY id ASC`
+    ).all(planId);
+  },
+
+  listPlans({ month = '', planType = '', status = '', unitCode = '' } = {}) {
+    const where = ['deleted_at IS NULL'];
+    const params = [];
+    if (month) { where.push('month = ?'); params.push(month); }
+    if (planType) { where.push('plan_type = ?'); params.push(planType); }
+    if (status) { where.push('status = ?'); params.push(status); }
+    if (unitCode) { where.push('unit_code = ?'); params.push(unitCode); }
+    return db.prepare(
+      `SELECT id, plan_no AS planNo, month, plan_type AS planType, unit_code AS unitCode, unit_name AS unitName,
+              status, reject_reason AS rejectReason, created_by AS createdBy, created_at AS createdAt
+       FROM plans WHERE ${where.join(' AND ')} ORDER BY id DESC`
+    ).all(...params);
+  },
+
+  updatePlanStatus(id, status, rejectReason = null) {
+    db.prepare(
+      `UPDATE plans SET status = ?, reject_reason = ?, updated_at = datetime('now','localtime') WHERE id = ? AND deleted_at IS NULL`
+    ).run(status, rejectReason, id);
+    return this.findPlan(id);
   }
 };
 

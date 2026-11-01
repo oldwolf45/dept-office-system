@@ -6,7 +6,10 @@ import type {
   CreateMaterialCategoryParams,
   UpdateMaterialCategoryParams,
   CreateFinanceCategoryParams,
-  UpdateFinanceCategoryParams
+  UpdateFinanceCategoryParams,
+  Plan,
+  CreatePlanParams,
+  PlanSummaryResult
 } from '@/types/materials'
 
 // 材料模块接口统一走本文件（开发计划 §2.3-3：组件只调 api 函数，不直接写 axios）
@@ -54,4 +57,27 @@ export function disableFinanceCategory(id: number): Promise<FinanceCategory> {
 }
 export function enableFinanceCategory(id: number): Promise<FinanceCategory> {
   return request.post<unknown, FinanceCategory>(`/materials/finance-categories/${id}/enable`)
+}
+
+// ---------- 计划管理（T2）----------
+export function listPlans(params: { month?: string; planType?: string; status?: string } = {}): Promise<Plan[]> {
+  return request.get<unknown, Plan[]>('/materials/plans', { params })
+}
+export function getPlan(id: number): Promise<Plan> {
+  return request.get<unknown, Plan>(`/materials/plans/${id}`)
+}
+export function createPlan(data: CreatePlanParams): Promise<Plan> {
+  return request.post<unknown, Plan>('/materials/plans', data)
+}
+export function submitPlan(id: number): Promise<Plan> {
+  return request.post<unknown, Plan>(`/materials/plans/${id}/submit`)
+}
+export function approvePlan(id: number): Promise<Plan> {
+  return request.post<unknown, Plan>(`/materials/plans/${id}/approve`)
+}
+export function rejectPlan(id: number, reason: string): Promise<Plan> {
+  return request.post<unknown, Plan>(`/materials/plans/${id}/reject`, { reason })
+}
+export function summaryPlans(month: string): Promise<PlanSummaryResult> {
+  return request.get<unknown, PlanSummaryResult>('/materials/plans/summary', { params: { month } })
 }

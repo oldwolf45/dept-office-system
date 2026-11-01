@@ -14,7 +14,14 @@ import {
   createFinanceCategory,
   updateFinanceCategory,
   disableFinanceCategory,
-  enableFinanceCategory
+  enableFinanceCategory,
+  createPlan,
+  listPlans,
+  getPlan,
+  submitPlan,
+  approvePlan,
+  rejectPlan,
+  summaryPlans
 } from '../controllers/materialsController.js';
 
 const router = express.Router();
@@ -40,5 +47,14 @@ router.post('/finance-categories', createFinanceCategory);
 router.put('/finance-categories/:id', updateFinanceCategory);
 router.post('/finance-categories/:id/disable', disableFinanceCategory);
 router.post('/finance-categories/:id/enable', enableFinanceCategory);
+
+// 计划管理（T2）：填报→提交→审核/驳回→汇总
+router.get('/plans/summary', summaryPlans); // 须先于 /plans/:id 注册，否则被 :id 吞掉
+router.get('/plans', listPlans);
+router.post('/plans', createPlan);
+router.get('/plans/:id', getPlan);
+router.post('/plans/:id/submit', submitPlan);
+router.post('/plans/:id/approve', approvePlan);
+router.post('/plans/:id/reject', rejectPlan);
 
 export default router;

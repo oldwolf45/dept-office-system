@@ -142,3 +142,96 @@ describe('材料模块访问权（M1）', () => {
     expect(res.body.code).toBe(4030)
   })
 })
+
+describe('材料模块 T2 计划管理', () => {
+  const h = () => ({ Authorization: `Bearer ${globalThis.__token}` })
+
+  // M1 已让 module_access 进入"已配置"态，这里把测试用户补进白名单，保证可访问。
+  // 用 INSERT OR IGNORE 幂等，避免重复运行报错。
+  beforeAll(() => {
+    const exists = db.prepare(
+      `SELECT 1 AS x FROM module_access WHERE user_id=? AND module_code='materials' AND deleted_at IS NULL`
+    ).get(globalThis.__userId)
+    if (!exists) {
+      db.prepare(`INSERT INTO module_access (user_id, module_code, granted_by) VALUES (?, 'materials', ?)`)
+        .run(globalThis.__userId, globalThis.__userId)
+    }
+  })
+
+  it('创建计划：有效明细 → 草稿 + 编号格式 + 金额=数量×单价', async () => {
+    const r = await supertest(app).post('/api/materials/plans').set(h()).send({
+      month: '2026-11',
+      planType: 'workshop',
+      unitCode: 'W1',
+      unitName: '一车间',
+      items: [{ materialName: '氧气', plannedQty: 10, referencePrice: 25, categoryId: null }]
+    })
+    expect(r.body.code).toBe(0)
+    expect(r.body.data.status).toBe('draft')
+    expect(/^JH\d{11}$/.test(r.body.data.planNo)).toBe(true)
+    expect(Array.isArray(r.body.data.items)).toBe(true)
+    expect(r.body.data.items[0].plannedAmount).toBe(250)
+  })
+
+  it('创建计划：参数校验（月份/明细空/数量≤0）→ 4000', async () => {
+    const badMonth = await supertest(app).post('/api/materials/plans').set(h()).send({
+      month: '2026/11', planType: 'workshop', unitCode: 'W1', unitName: '一车间', items: []
+    })
+    expect(badMonth.body.code).toBe(4000)
+
+    const emptyItems = await supertest(app).post('/api/materials/plans').set(h()).send({
+      month: '2026-11', planType: 'workshop', unitCode: 'W1', unitName: '一车间', items: []
+    })
+    expect(emptyItems.body.code).toBe(4000)
+
+    const badQty = await supertest(app).post('/api/materials/plans').set(h()).send({
+      month: '2026-11', planType: 'workshop', unitCode: 'W1', unitName: '一车间',
+      items: [{ materialName: '乙炔', plannedQty: 0, referencePrice: 10 }]
+    })
+    expect(badQty.body.code).toBe(4000)
+  })
+
+  it('流程：草稿→提交→审核通过 / 提交→驳回(必填意见)', async () => {
+    const created = await supertest(app).post('/api/materials/plans').set(h()).send({
+      month: '2026-11', planType: 'section', unitCode: 'S1', unitName: '综合科',
+      items: [{ materialName: '焊条', plannedQty: 5, referencePrice: 12 }]
+    })
+    const id = created.body.data.id
+    expect(created.body.data.status).toBe('draft')
+
+    const submitted = await supertest(app).post(`/api/materials/plans/${id}/submit`).set(h())
+    expect(submitted.body.code).toBe(0)
+    expect(submitted.body.data.status).toBe('submitted')
+
+    // 驳回必填意见
+    const rejectNoReason = await supertest(app).post(`/api/materials/plans/${id}/reject`).set(h()).send({})
+    expect(rejectNoReason.body.code).toBe(4000)
+    const rejected = await supertest(app).post(`/api/materials/plans/${id}/reject`).set(h()).send({ reason: '数量偏高' })
+    expect(rejected.body.code).toBe(0)
+    expect(rejected.body.data.status).toBe('rejected')
+    expect(rejected.body.data.rejectReason).toBe('数量偏高')
+
+    // 新计划走审核通过
+    const c2 = await supertest(app).post('/api/materials/plans').set(h()).send({
+      month: '2026-11', planType: 'workshop', unitCode: 'W2', unitName: '二车间',
+      items: [{ materialName: '螺栓', plannedQty: 100, referencePrice: 1 }]
+    })
+    const id2 = c2.body.data.id
+    await supertest(app).post(`/api/materials/plans/${id2}/submit`).set(h())
+    const approved = await supertest(app).post(`/api/materials/plans/${id2}/approve`).set(h())
+    expect(approved.body.data.status).toBe('approved')
+  })
+
+  it('汇总：按单位聚合（数量/通过/驳回）', async () => {
+    const r = await supertest(app).get('/api/materials/plans/summary?month=2026-11').set(h())
+    expect(r.body.code).toBe(0)
+    expect(r.body.data.month).toBe('2026-11')
+    const byUnit = r.body.data.byUnit
+    expect(Array.isArray(byUnit)).toBe(true)
+    const w2 = byUnit.find((u) => u.unitName === '二车间')
+    expect(w2).toBeTruthy()
+    expect(w2.approved).toBeGreaterThanOrEqual(1)
+    const s1 = byUnit.find((u) => u.unitName === '综合科')
+    expect(s1.rejected).toBeGreaterThanOrEqual(1)
+  })
+})

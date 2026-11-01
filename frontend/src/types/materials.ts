@@ -72,3 +72,62 @@ export interface UpdateFinanceCategoryParams {
   type?: 'income' | 'expense'
   sortOrder?: number
 }
+
+// ---------- 计划管理（T2）----------
+export type PlanType = 'workshop' | 'section'
+export type PlanStatus = 'draft' | 'submitted' | 'approved' | 'rejected'
+
+export interface PlanItem {
+  id: number
+  planId: number
+  categoryId: number | null
+  materialName: string
+  plannedQty: number
+  referencePrice: number
+  plannedAmount: number
+}
+
+export interface Plan {
+  id: number
+  planNo: string
+  month: string
+  planType: PlanType
+  unitCode: string
+  unitName: string
+  status: PlanStatus
+  rejectReason: string | null
+  createdBy: number | null
+  createdAt: string
+  updatedAt: string
+  items?: PlanItem[]
+}
+
+export interface CreatePlanItemParams {
+  materialName: string
+  plannedQty: number
+  referencePrice: number
+  categoryId?: number | null
+}
+
+export interface CreatePlanParams {
+  month: string
+  planType: PlanType
+  unitCode: string
+  unitName: string
+  items: CreatePlanItemParams[]
+}
+
+export interface PlanUnitSummary {
+  unitName: string
+  planType: PlanType
+  count: number
+  approved: number
+  rejected: number
+}
+
+export interface PlanSummaryResult {
+  month: string
+  total: number
+  plans: Plan[]
+  byUnit: PlanUnitSummary[]
+}
