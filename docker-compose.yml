@@ -5,11 +5,11 @@ services:
       - "127.0.0.1:3000:3000"
     volumes:
       - ./data:/app/data
-    env_file:
-      - .env
     environment:
       PORT: "3000"
       DATA_DIR: /app/data
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me}
+      MINIMAX_API_KEY: ${MINIMAX_API_KEY:-}
     restart: unless-stopped
 
   web:
@@ -18,7 +18,7 @@ services:
       - "8080:80"
       - "8443:443"
     volumes:
-      - ./certs:/etc/nginx/certs
+      - ./certs:/etc/nginx/certs:ro
     depends_on:
       - api
     restart: unless-stopped
