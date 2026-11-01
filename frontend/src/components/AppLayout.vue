@@ -22,6 +22,7 @@ const MENU_REGISTRY: MenuItem[] = [
   { code: 'stats', path: '/stats', label: '汇总统计' },
   { code: 'summary', path: '/summary', label: '总结与PPT' },
   { code: 'experience', path: '/experience', label: '汇总经验库' },
+  { code: 'materials', path: '/materials', label: '材料管理' },
   { code: 'settings', path: '/settings', label: '系统设置' }
 ]
 

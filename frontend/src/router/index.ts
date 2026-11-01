@@ -103,6 +103,13 @@ const router = createRouter({
           component: () => import('@/views/settings/SettingsView.vue'),
           meta: { menu: 'settings' }
         },
+        {
+          // 材料管理模块（v1.1）：仅拥有模块访问权的用户可见（meta.menu 由 /api/auth/me 下发）
+          path: 'materials',
+          name: 'materials',
+          component: () => import('@/views/materials/MaterialsDashboardView.vue'),
+          meta: { menu: 'materials' }
+        },
         { path: '', redirect: '/dashboard' }
       ]
     }
