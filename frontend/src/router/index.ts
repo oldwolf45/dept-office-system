@@ -134,6 +134,30 @@ const router = createRouter({
           component: () => import('@/views/materials/PurchaseView.vue'),
           meta: { menu: 'materials' }
         },
+        {
+          path: 'materials/arrivals',
+          name: 'materials-arrivals',
+          component: () => import('@/views/materials/ArrivalView.vue'),
+          meta: { menu: 'materials' }
+        },
+        {
+          path: 'materials/list',
+          name: 'materials-list',
+          component: () => import('@/views/materials/MaterialListView.vue'),
+          meta: { menu: 'materials' }
+        },
+        {
+          path: 'materials/flow',
+          name: 'materials-flow',
+          component: () => import('@/views/materials/FlowView.vue'),
+          meta: { menu: 'materials' }
+        },
+        {
+          path: 'materials/stats',
+          name: 'materials-stats',
+          component: () => import('@/views/materials/StatsView.vue'),
+          meta: { menu: 'materials' }
+        },
         { path: '', redirect: '/dashboard' }
       ]
     }

@@ -10,7 +10,12 @@ import {
   rejectPlan,
   summaryPlans
 } from '@/api/materials'
+import { useMaterialsAccess } from '@/composables/useMaterialsAccess'
 import type { Plan, PlanItem, PlanStatus, PlanType, PlanSummaryResult, CreatePlanItemParams } from '@/types/materials'
+
+const { hasRole } = useMaterialsAccess()
+const canCreatePlan = (): boolean => hasRole('workshop_director', 'section_agent')
+const canApprove = (): boolean => hasRole('workshop_manager', 'supply')
 
 const STATUS_LABELS: Record<PlanStatus, string> = {
   draft: '草稿',
@@ -171,7 +176,8 @@ onMounted(load)
   <div class="p-4">
     <div class="flex items-center justify-between mb-4">
       <h2 class="text-lg font-bold">需求计划管理</h2>
-      <el-button type="primary" @click="openCreate">新增计划</el-button>
+      <el-button v-if="canCreatePlan()" type="primary" @click="openCreate">新增计划</el-button>
+      <el-tag v-else type="info">当前角色仅可查看/提交</el-tag>
     </div>
 
     <!-- 筛选 -->
@@ -206,8 +212,8 @@ onMounted(load)
         <template #default="{ row }">
           <el-button link type="primary" @click="viewDetail(row)">查看</el-button>
           <el-button v-if="row.status === 'draft'" link type="warning" @click="doSubmit(row)">提交</el-button>
-          <el-button v-if="row.status === 'submitted'" link type="success" @click="doApprove(row)">通过</el-button>
-          <el-button v-if="row.status === 'submitted'" link type="danger" @click="doReject(row)">驳回</el-button>
+          <el-button v-if="row.status === 'submitted' && canApprove()" link type="success" @click="doApprove(row)">通过</el-button>
+          <el-button v-if="row.status === 'submitted' && canApprove()" link type="danger" @click="doReject(row)">驳回</el-button>
         </template>
       </el-table-column>
     </el-table>

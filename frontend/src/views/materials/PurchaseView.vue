@@ -8,7 +8,11 @@ import {
   getMaterialCategories,
   getFinanceCategories
 } from '@/api/materials'
+import { useMaterialsAccess } from '@/composables/useMaterialsAccess'
 import type { Purchase, MaterialCategory, FinanceCategory, CreatePurchaseParams } from '@/types/materials'
+
+const { hasRole } = useMaterialsAccess()
+const canSupply = (): boolean => hasRole('supply')
 
 const STATUS_LABELS: Record<Purchase['status'], string> = { normal: '正常', void: '已作废' }
 
@@ -129,7 +133,8 @@ onMounted(() => {
   <div class="p-4">
     <div class="flex items-center justify-between mb-4">
       <h2 class="text-lg font-bold">采购管理</h2>
-      <el-button type="primary" @click="openCreate">登记采购</el-button>
+      <el-button v-if="canSupply()" type="primary" @click="openCreate">登记采购</el-button>
+      <el-tag v-else type="info">仅供应科可登记</el-tag>
     </div>
 
     <div class="flex flex-wrap items-center gap-2 mb-4">

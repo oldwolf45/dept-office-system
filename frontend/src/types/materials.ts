@@ -163,3 +163,150 @@ export interface CreatePurchaseParams {
   purchaseDate: string
   handler?: string
 }
+
+// ---------- 到货与材料（T4/T6）----------
+export interface Material {
+  id: number
+  materialCode: string
+  purchaseId: number | null
+  categoryId: number | null
+  name: string
+  spec: string | null
+  unit: string | null
+  status: MaterialStatus
+  arrivedAt: string
+  createdBy?: number | null
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface MaterialEvent {
+  id: number
+  refType: string | null
+  refId: number | null
+  action: string
+  operatorId: number | null
+  operatorName: string | null
+  qty: number | null
+  amount: number | null
+  occurAt: string | null
+  createdAt: string
+}
+
+export interface MaterialDetail extends Material {
+  events: MaterialEvent[]
+}
+
+export interface CreateArrivalItemParams {
+  categoryId?: number | null
+  name: string
+  spec?: string
+  unit?: string
+  qty: number
+}
+
+export interface CreateArrivalParams {
+  purchaseId?: number | null
+  arrivedAt: string
+  items: CreateArrivalItemParams[]
+}
+
+// ---------- 领用/回收/处置（T5）----------
+export interface IssueRecord {
+  id: number
+  issueNo: string
+  receiveUnitType: 'workshop' | 'section'
+  receiveUnitName: string
+  qty: number
+  handler: string | null
+  issueDate: string
+  status: 'normal' | 'void'
+}
+
+export interface CreateIssueParams {
+  purchaseId?: number | null
+  materialIds: number[]
+  receiveUnitType: 'workshop' | 'section'
+  receiveUnitCode: string
+  receiveUnitName: string
+  handler?: string
+  issueDate: string
+}
+
+export interface RecycleRecord {
+  id: number
+  issueRecordId: number | null
+  materialId: number
+  qty: number
+  handler: string | null
+  recycleDate: string
+  status: 'normal' | 'void'
+}
+
+export interface CreateRecycleParams {
+  issueRecordId?: number | null
+  materialId: number
+  qty?: number
+  handler?: string
+  recycleDate: string
+}
+
+export interface DisposalItem {
+  id: number
+  disposalBatchId: number
+  materialId: number
+  name: string
+  qty: number
+  income: number
+}
+
+export interface DisposalBatch {
+  id: number
+  disposalNo: string
+  categoryId: number | null
+  disposeType: string | null
+  totalQty: number
+  totalIncome: number
+  handler: string | null
+  disposeDate: string
+  status: 'normal' | 'void'
+  items?: DisposalItem[]
+}
+
+export interface CreateDisposalItemParams {
+  materialId: number
+  name?: string
+  qty: number
+  income: number
+}
+
+export interface CreateDisposalParams {
+  categoryId?: number | null
+  disposeType?: string | null
+  items: CreateDisposalItemParams[]
+  handler?: string
+  disposeDate: string
+}
+
+// ---------- 汇总/概览（T7/T9）----------
+export interface MonthlyAmountRow {
+  month: string
+  amt: number
+}
+export interface MonthlyFlowRow {
+  month: string
+  action: string
+  n: number
+}
+export interface MonthlySummary {
+  purchase: MonthlyAmountRow[]
+  dispose: MonthlyAmountRow[]
+  flow: MonthlyFlowRow[]
+}
+export interface DashboardOverview {
+  planStatus: Record<string, number>
+  purchaseAmount: number
+  disposeIncome: number
+  materialByStatus: Record<string, number>
+  pendingApproval: number
+}

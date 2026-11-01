@@ -11,7 +11,18 @@ import type {
   CreatePlanParams,
   PlanSummaryResult,
   Purchase,
-  CreatePurchaseParams
+  CreatePurchaseParams,
+  Material,
+  MaterialDetail,
+  CreateArrivalParams,
+  IssueRecord,
+  CreateIssueParams,
+  RecycleRecord,
+  CreateRecycleParams,
+  DisposalBatch,
+  CreateDisposalParams,
+  MonthlySummary,
+  DashboardOverview
 } from '@/types/materials'
 
 // 材料模块接口统一走本文件（开发计划 §2.3-3：组件只调 api 函数，不直接写 axios）
@@ -96,4 +107,43 @@ export function createPurchase(data: CreatePurchaseParams): Promise<Purchase> {
 }
 export function voidPurchase(id: number, reason: string): Promise<Purchase> {
   return request.post<unknown, Purchase>(`/materials/purchases/${id}/void`, { reason })
+}
+
+// ---------- 到货与材料（T4/T6）----------
+export function createArrival(data: CreateArrivalParams): Promise<{ count: number; list: Material[] }> {
+  return request.post<unknown, { count: number; list: Material[] }>('/materials/arrivals', data)
+}
+export function listMaterials(params: { code?: string; name?: string; categoryId?: number; status?: string } = {}): Promise<Material[]> {
+  return request.get<unknown, Material[]>('/materials/materials', { params })
+}
+export function getMaterial(id: number): Promise<MaterialDetail> {
+  return request.get<unknown, MaterialDetail>(`/materials/materials/${id}`)
+}
+
+// ---------- 领用/回收/处置（T5）----------
+export function listIssues(params: { receiveUnitType?: string; status?: string } = {}): Promise<IssueRecord[]> {
+  return request.get<unknown, IssueRecord[]>('/materials/issues', { params })
+}
+export function createIssue(data: CreateIssueParams): Promise<IssueRecord> {
+  return request.post<unknown, IssueRecord>('/materials/issues', data)
+}
+export function createRecycle(data: CreateRecycleParams): Promise<RecycleRecord> {
+  return request.post<unknown, RecycleRecord>('/materials/recycles', data)
+}
+export function listDisposals(params: { status?: string } = {}): Promise<DisposalBatch[]> {
+  return request.get<unknown, DisposalBatch[]>('/materials/disposals', { params })
+}
+export function getDisposalBatch(id: number): Promise<DisposalBatch> {
+  return request.get<unknown, DisposalBatch>(`/materials/disposals/${id}`)
+}
+export function createDisposal(data: CreateDisposalParams): Promise<DisposalBatch> {
+  return request.post<unknown, DisposalBatch>('/materials/disposals', data)
+}
+
+// ---------- 汇总/概览（T7/T9）----------
+export function getMonthlySummary(): Promise<MonthlySummary> {
+  return request.get<unknown, MonthlySummary>('/materials/stats/monthly')
+}
+export function getDashboardOverview(): Promise<DashboardOverview> {
+  return request.get<unknown, DashboardOverview>('/materials/dashboard/overview')
 }
