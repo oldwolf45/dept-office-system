@@ -438,6 +438,204 @@ function runSchema() {
   );
   `);
 
+  // ============ v1.1 材料模块（T0 骨架；全部软删除 deleted_at，随平台统一备份）============
+  db.exec(`
+  CREATE TABLE IF NOT EXISTS material_categories (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    code TEXT,
+    name TEXT NOT NULL,
+    parent_id INTEGER,
+    status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','disabled')),
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    created_by INTEGER,
+    created_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+    deleted_at TEXT
+  );
+
+  CREATE TABLE IF NOT EXISTS finance_categories (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    type TEXT NOT NULL DEFAULT 'expense' CHECK(type IN ('income','expense')),
+    status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','disabled')),
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    created_by INTEGER,
+    created_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+    deleted_at TEXT
+  );
+
+  CREATE TABLE IF NOT EXISTS plans (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    plan_no TEXT NOT NULL UNIQUE,
+    month TEXT NOT NULL,
+    plan_type TEXT NOT NULL CHECK(plan_type IN ('workshop','section')),
+    unit_code TEXT NOT NULL,
+    unit_name TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft','submitted','approved','rejected')),
+    reject_reason TEXT,
+    created_by INTEGER,
+    created_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+    deleted_at TEXT
+  );
+
+  CREATE TABLE IF NOT EXISTS plan_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    plan_id INTEGER NOT NULL,
+    category_id INTEGER,
+    material_name TEXT NOT NULL,
+    planned_qty INTEGER NOT NULL DEFAULT 0,
+    reference_price REAL NOT NULL DEFAULT 0,
+    planned_amount REAL NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+    deleted_at TEXT
+  );
+
+  CREATE TABLE IF NOT EXISTS purchases (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    purchase_no TEXT NOT NULL UNIQUE,
+    plan_id INTEGER,
+    category_id INTEGER,
+    supplier TEXT,
+    item_desc TEXT NOT NULL,
+    amount REAL NOT NULL DEFAULT 0,
+    fund_category_id INTEGER,
+    purchase_date TEXT NOT NULL,
+    handler TEXT,
+    status TEXT NOT NULL DEFAULT 'normal' CHECK(status IN ('normal','void')),
+    void_reason TEXT,
+    created_by INTEGER,
+    created_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+    deleted_at TEXT
+  );
+
+  CREATE TABLE IF NOT EXISTS materials (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    material_code TEXT NOT NULL UNIQUE,
+    purchase_id INTEGER,
+    category_id INTEGER,
+    name TEXT NOT NULL,
+    spec TEXT,
+    unit TEXT,
+    status TEXT NOT NULL DEFAULT 'in_stock' CHECK(status IN ('in_stock','issued','recycled','disposed')),
+    arrived_at TEXT NOT NULL,
+    created_by INTEGER,
+    created_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+    deleted_at TEXT
+  );
+
+  CREATE TABLE IF NOT EXISTS material_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    material_id INTEGER,
+    ref_type TEXT,
+    ref_id INTEGER,
+    action TEXT NOT NULL,
+    operator_id INTEGER,
+    operator_name TEXT,
+    qty REAL,
+    amount REAL,
+    occur_at TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+    deleted_at TEXT
+  );
+
+  CREATE TABLE IF NOT EXISTS issue_records (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    issue_no TEXT NOT NULL UNIQUE,
+    purchase_id INTEGER,
+    material_ids TEXT,
+    receive_unit_type TEXT NOT NULL CHECK(receive_unit_type IN ('workshop','section')),
+    receive_unit_code TEXT NOT NULL,
+    receive_unit_name TEXT NOT NULL,
+    qty INTEGER NOT NULL DEFAULT 0,
+    handler TEXT,
+    issue_date TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'normal' CHECK(status IN ('normal','void')),
+    void_reason TEXT,
+    created_by INTEGER,
+    created_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+    deleted_at TEXT
+  );
+
+  CREATE TABLE IF NOT EXISTS recycle_records (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    recycle_no TEXT,
+    issue_record_id INTEGER,
+    material_id INTEGER,
+    qty INTEGER NOT NULL DEFAULT 0,
+    handler TEXT,
+    recycle_date TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'normal' CHECK(status IN ('normal','void')),
+    created_by INTEGER,
+    created_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+    deleted_at TEXT
+  );
+
+  CREATE TABLE IF NOT EXISTS disposal_batches (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    disposal_no TEXT NOT NULL UNIQUE,
+    category_id INTEGER,
+    dispose_type TEXT,
+    total_qty INTEGER NOT NULL DEFAULT 0,
+    total_income REAL NOT NULL DEFAULT 0,
+    handler TEXT,
+    dispose_date TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'normal' CHECK(status IN ('normal','void')),
+    void_reason TEXT,
+    created_by INTEGER,
+    created_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+    deleted_at TEXT
+  );
+
+  CREATE TABLE IF NOT EXISTS disposal_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    disposal_batch_id INTEGER NOT NULL,
+    material_id INTEGER,
+    name TEXT NOT NULL,
+    qty INTEGER NOT NULL DEFAULT 0,
+    income REAL NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+    deleted_at TEXT
+  );
+
+  CREATE TABLE IF NOT EXISTS module_role_map (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    role TEXT NOT NULL CHECK(role IN ('workshop_director','workshop_manager','supply','section_agent')),
+    unit_type TEXT NOT NULL CHECK(unit_type IN ('workshop','section')),
+    unit_code TEXT NOT NULL,
+    unit_name TEXT NOT NULL,
+    created_by INTEGER,
+    created_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+    deleted_at TEXT
+  );
+
+  CREATE TABLE IF NOT EXISTS module_access (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    module_code TEXT NOT NULL DEFAULT 'materials',
+    granted_by INTEGER,
+    granted_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+    created_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+    deleted_at TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_module_access_user ON module_access(user_id, module_code);
+  `);
+
+  // 物料账领用表（material_issues）补充材料模块关联字段（T8 联动；幂等，不动原数据）
+  const issueCols = db.prepare(`PRAGMA table_info(material_issues)`).all().map((c) => c.name);
+  if (issueCols.length) {
+    if (!issueCols.includes('material_issue_id')) db.exec(`ALTER TABLE material_issues ADD COLUMN material_issue_id INTEGER`);
+    if (!issueCols.includes('material_codes')) db.exec(`ALTER TABLE material_issues ADD COLUMN material_codes TEXT`);
+    if (!issueCols.includes('material_plan_id')) db.exec(`ALTER TABLE material_issues ADD COLUMN material_plan_id INTEGER`);
+  }
+
   // S6 经验库候选标记列（D34：月度报表汇总说明进检索池）幂等补列
   const saCols = db.prepare(`PRAGMA table_info(summary_archives)`).all().map((c) => c.name);
   if (saCols.length && !saCols.includes('is_sample_candidate')) {
@@ -469,6 +667,15 @@ if (dictCount === 0) {
 
 // ============ 停滞阈值 settings 初始化（默认 7 天，契约 §2.7）============
 db.prepare(`INSERT OR IGNORE INTO settings (key, value) VALUES ('stall_days', '7')`).run();
+
+// ============ v1.1 材料模块收支分类种子（T0；空库一次性；T1 起界面维护）============
+const fcCount = db.prepare(`SELECT COUNT(*) AS n FROM finance_categories WHERE deleted_at IS NULL`).get().n;
+if (fcCount === 0) {
+  const insFc = db.prepare(`INSERT INTO finance_categories (name, type, sort_order) VALUES (?, ?, ?)`);
+  insFc.run('采购支出', 'expense', 1);
+  insFc.run('处置收入', 'income', 2);
+  insFc.run('回收残值', 'income', 3);
+}
 
 // S7 单位名称（封面/Word/PPT 用，契约 §3：配置驱动不写死）
 db.prepare(`INSERT OR IGNORE INTO settings (key, value) VALUES ('company_name', 'XX单位')`).run();

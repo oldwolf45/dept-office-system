@@ -103,6 +103,61 @@ const router = createRouter({
           component: () => import('@/views/settings/SettingsView.vue'),
           meta: { menu: 'settings' }
         },
+        {
+          // 材料管理模块（v1.1）：仅拥有模块访问权的用户可见（meta.menu 由 /api/auth/me 下发）
+          path: 'materials',
+          name: 'materials',
+          component: () => import('@/views/materials/MaterialsDashboardView.vue'),
+          meta: { menu: 'materials' }
+        },
+        {
+          path: 'materials/categories',
+          name: 'materials-categories',
+          component: () => import('@/views/materials/MaterialsCategoryView.vue'),
+          meta: { menu: 'materials' }
+        },
+        {
+          path: 'materials/finance',
+          name: 'materials-finance',
+          component: () => import('@/views/materials/FinanceCategoryView.vue'),
+          meta: { menu: 'materials' }
+        },
+        {
+          path: 'materials/plans',
+          name: 'materials-plans',
+          component: () => import('@/views/materials/PlanView.vue'),
+          meta: { menu: 'materials' }
+        },
+        {
+          path: 'materials/purchases',
+          name: 'materials-purchases',
+          component: () => import('@/views/materials/PurchaseView.vue'),
+          meta: { menu: 'materials' }
+        },
+        {
+          path: 'materials/arrivals',
+          name: 'materials-arrivals',
+          component: () => import('@/views/materials/ArrivalView.vue'),
+          meta: { menu: 'materials' }
+        },
+        {
+          path: 'materials/list',
+          name: 'materials-list',
+          component: () => import('@/views/materials/MaterialListView.vue'),
+          meta: { menu: 'materials' }
+        },
+        {
+          path: 'materials/flow',
+          name: 'materials-flow',
+          component: () => import('@/views/materials/FlowView.vue'),
+          meta: { menu: 'materials' }
+        },
+        {
+          path: 'materials/stats',
+          name: 'materials-stats',
+          component: () => import('@/views/materials/StatsView.vue'),
+          meta: { menu: 'materials' }
+        },
         { path: '', redirect: '/dashboard' }
       ]
     }

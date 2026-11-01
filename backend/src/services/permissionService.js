@@ -1,6 +1,7 @@
 // 权限计算服务（契约 2.1/2.2/2.4、4.1）：/api/auth/me 的 permissions 由此生成
 import db from '../models/db.js';
 import delegationModel from '../models/delegationModel.js';
+import { hasModuleAccess } from '../models/materialsModel.js';
 
 // 工作指派范围（契约 2.2）：副经理(5)→4/3/2；副总师(4)→3/2；科长(3)→2/1；副科长(2)→1
 const ASSIGNABLE_ROLE_MAP = { 5: [4, 3, 2], 4: [3, 2], 3: [2, 1], 2: [1], 1: [] };
@@ -39,6 +40,8 @@ export function computePermissions(user) {
   if (level >= 2) menus.push('personnel');
   if (accountingView) menus.push('accounting', 'reports');
   if (level >= 2 || isBookkeeper) menus.push('experience');
+  // 材料模块菜单：仅对拥有材料模块访问权的用户下发（接入管理 PRD §3.2 / M1）
+  if (hasModuleAccess(user.id)) menus.push('materials');
 
   // 按钮级权限（契约 2.4/4.1）：返回当前用户拥有的权限码数组，前端 includes 判断
   const buttons = [];

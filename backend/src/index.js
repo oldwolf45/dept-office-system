@@ -19,6 +19,7 @@ import statsRouter from './routes/stats.js';
 import summariesRouter from './routes/summaries.js';
 import reportsRouter from './routes/reports.js';
 import systemRouter from './routes/system.js';
+import materialsRouter from './routes/materials.js';
 import { notFound, errorHandler } from './middleware/response.js';
 import { maintenanceGuard } from './middleware/maintenance.js';
 
@@ -49,6 +50,7 @@ app.use('/api/reports', reportsRouter);
 app.use('/api', summariesRouter);
 // 全新部署：系统公开信息 + 引导首个管理员（免登录）
 app.use('/api', systemRouter);
+app.use('/api/materials', materialsRouter);
 
 // 404 与全局错误处理统一走 { code, data, message }
 app.use(notFound);
