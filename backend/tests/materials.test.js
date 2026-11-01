@@ -395,3 +395,84 @@ describe('材料模块 T4~T9 到货/流转/汇总', () => {
     expect(r.body.code).toBe(4031)
   })
 })
+
+describe('材料模块 T11 总验收：两月模拟全流程', () => {
+  const h = () => ({ Authorization: `Bearer ${globalThis.__token}` })
+  const A = '2026-09'
+  const B = '2026-10'
+
+  it('走完整月度流程（计划→采购→到货→领用→回收/处置）并核对 A5/A6/A7/A9/A12/A13', async () => {
+    // 类别（带两位码，供 CL 编号）
+    const cat = await supertest(app).post('/api/materials/categories').set(h()).send({ code: '09', name: `验收类别${Date.now()}` })
+    const catId = cat.body.data.id
+
+    // --- 计划：两个月的科室计划，均提交；9 月一通过一驳回 ---
+    async function makePlan(month, unitName, unitCode) {
+      const c = await supertest(app).post('/api/materials/plans').set(h()).send({
+        month, planType: 'section', unitCode, unitName,
+        items: [{ categoryId: catId, materialName: '验收物料', plannedQty: 2, referencePrice: 10 }]
+      })
+      const id = c.body.data.id
+      await supertest(app).post(`/api/materials/plans/${id}/submit`).set(h())
+      return id
+    }
+    const pA1 = await makePlan(A, '验收科室', 'SECX')
+    const pA2 = await makePlan(A, '验收科室2', 'SECY')
+    const okA = await supertest(app).post(`/api/materials/plans/${pA1}/approve`).set(h())
+    expect(okA.body.data.status).toBe('approved')
+    const rejA = await supertest(app).post(`/api/materials/plans/${pA2}/reject`).set(h()).send({ reason: '预算超' })
+    expect(rejA.body.data.status).toBe('rejected')
+
+    // --- 采购：两个月各一笔（金额可核对） ---
+    const buyA = await supertest(app).post('/api/materials/purchases').set(h()).send({ itemDesc: '九月采购', amount: 1000, purchaseDate: `${A}-05` })
+    const buyB = await supertest(app).post('/api/materials/purchases').set(h()).send({ itemDesc: '十月采购', amount: 2000, purchaseDate: `${B}-05` })
+    expect(buyA.body.code).toBe(0)
+    expect(buyB.body.code).toBe(0)
+
+    // --- 到货：九月 2 件、十月 1 件，编号唯一 ---
+    const arrA = await supertest(app).post('/api/materials/arrivals').set(h()).send({ arrivedAt: `${A}-15`, items: [{ categoryId: catId, name: '验收件', qty: 2 }] })
+    const arrB = await supertest(app).post('/api/materials/arrivals').set(h()).send({ arrivedAt: `${B}-15`, items: [{ categoryId: catId, name: '验收件', qty: 1 }] })
+    const codes = [...arrA.body.data.list, ...arrB.body.data.list].map((m) => m.materialCode)
+    expect(new Set(codes).size).toBe(3) // A5 唯一
+    expect(codes.every((c) => /^CL\d{8}09\d{4}$/.test(c))).toBe(true)
+
+    // --- 领用：九月的 2 件发给科室 → A13 物料账联动 ---
+    const idsA = arrA.body.data.list.map((m) => m.id)
+    const issue = await supertest(app).post('/api/materials/issues').set(h()).send({
+      materialIds: idsA, receiveUnitType: 'section', receiveUnitCode: 'SECX', receiveUnitName: '验收科室', issueDate: `${A}-20`
+    })
+    expect(issue.body.code).toBe(0) // A6
+    const linked = db.prepare(`SELECT * FROM material_issues WHERE material_issue_id = ?`).get(issue.body.data.id)
+    expect(linked).toBeTruthy() // A13 联动存在
+    expect(linked.qty).toBe(2)   // 数量一致
+    expect(linked.material_codes.split(',').length).toBe(2)
+
+    // --- 回收 1 件 + 处置 1 件 → A7 ---
+    const rec = await supertest(app).post('/api/materials/recycles').set(h()).send({ materialId: idsA[0], recycleDate: `${A}-25` })
+    expect(rec.body.code).toBe(0)
+    const disp = await supertest(app).post('/api/materials/disposals').set(h()).send({ disposeType: '报废', items: [{ materialId: idsA[1], qty: 1, income: 30 }], disposeDate: `${A}-26` })
+    expect(disp.body.code).toBe(0)
+    expect(disp.body.data.totalIncome).toBe(30) // A7 处置收入
+
+    // --- 计划联动汇总（A12/M5）：九月供应科汇总含验收科室 ---
+    const sum = await supertest(app).get(`/api/materials/plans/summary?month=${A}`).set(h())
+    const unitRow = sum.body.data.byUnit.find((u) => u.unitName === '验收科室')
+    expect(unitRow).toBeTruthy()
+    expect(unitRow.approved).toBeGreaterThanOrEqual(1)
+
+    // --- 图表（A9）：两个月采购金额可核对 + 流转数量存在 ---
+    const monthly = await supertest(app).get('/api/materials/stats/monthly').set(h())
+    const pa = monthly.body.data.purchase.find((r) => r.month === A)
+    const pb = monthly.body.data.purchase.find((r) => r.month === B)
+    expect(pa.amt).toBe(1000)
+    expect(pb.amt).toBe(2000)
+    const flowMonthA = monthly.body.data.flow.filter((r) => r.month === A)
+    expect(flowMonthA.some((r) => r.action === 'issue' && r.n >= 2)).toBe(true)
+    expect(flowMonthA.some((r) => r.action === 'recycle')).toBe(true)
+    expect(flowMonthA.some((r) => r.action === 'dispose')).toBe(true)
+
+    // --- 概览（T9）：采购合计 ≥ 两月之和 ---
+    const ov = await supertest(app).get('/api/materials/dashboard/overview').set(h())
+    expect(Number(ov.body.data.purchaseAmount)).toBeGreaterThanOrEqual(3000)
+  })
+})

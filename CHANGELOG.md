@@ -4,7 +4,7 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/) 规范。
 
-## [1.1.0] - 待发布（开发中）
+## [1.1.0] - 2026-11-01
 
 材料终生管理系统并入办公系统，作为「材料管理」模块，并与科室记账「物料账」联动。
 
