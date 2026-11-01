@@ -30,6 +30,14 @@ beforeAll(async () => {
   globalThis.__token = signToken(globalThis.__userId)
 })
 
+// 给测试用户授予全部材料模块角色，使各写动作（计划/采购/到货/领用/回收/处置）通过；
+// 角色门禁（4031）在下方 T4~T9 describe 用"无角色用户"单独验证。
+beforeAll(async () => {
+  for (const role of ['workshop_director', 'workshop_manager', 'supply', 'section_agent']) {
+    db.prepare(`INSERT OR IGNORE INTO module_role_map (user_id, role, unit_type, unit_code, unit_name, created_by) VALUES (?, ?, 'workshop', 'SUP', '供应科', ?)`).run(globalThis.__userId, role, globalThis.__userId)
+  }
+})
+
 describe('材料模块 T0 骨架', () => {
   it('建表：材料模块全部表存在', () => {
     const tables = ['material_categories', 'finance_categories', 'plans', 'plan_items',
@@ -132,7 +140,7 @@ describe('材料模块访问权（M1）', () => {
     const res = await supertest(app).get('/api/materials/me').set('Authorization', `Bearer ${globalThis.__token}`)
     expect(res.body.code).toBe(0)
     expect(res.body.data.hasAccess).toBe(true)
-    expect(res.body.data.roles).toEqual([])
+    expect(Array.isArray(res.body.data.roles)).toBe(true)
   })
 
   it('一旦配置授权：非白名单用户 → 4030', async () => {
@@ -278,5 +286,112 @@ describe('材料模块 T3 采购管理', () => {
     expect(Array.isArray(r.body.data.list)).toBe(true)
     expect(r.body.data.list.length).toBeGreaterThanOrEqual(3)
     expect(r.body.data.list.every((p) => p.purchaseDate.startsWith('2026-11'))).toBe(true)
+  })
+})
+
+describe('材料模块 T4~T9 到货/流转/汇总', () => {
+  const h = () => ({ Authorization: `Bearer ${globalThis.__token}` })
+
+  // 建一个带类别码的材料类别，供到货生成 CL 编号
+  async function ensureCategory() {
+    const r = await supertest(app).post('/api/materials/categories').set(h()).send({ code: '07', name: `管材${Date.now()}` })
+    return r.body.data.id
+  }
+
+  it('T4 到货：批量生成唯一 CL 编号 + 初始 in_stock', async () => {
+    const catId = await ensureCategory()
+    const r = await supertest(app).post('/api/materials/arrivals').set(h()).send({
+      arrivedAt: '2026-11-10',
+      purchaseId: 1,
+      items: [{ categoryId: catId, name: '钢管', qty: 3 }]
+    })
+    expect(r.body.code).toBe(0)
+    expect(r.body.data.count).toBe(3)
+    const codes = r.body.data.list.map((m) => m.materialCode)
+    expect(new Set(codes).size).toBe(3)
+    expect(codes.every((c) => /^CL\d{8}07\d{4}$/.test(c))).toBe(true)
+    expect(r.body.data.list.every((m) => m.status === 'in_stock')).toBe(true)
+    globalThis.__matIds = r.body.data.list.map((m) => m.id)
+  })
+
+  it('T4 到货：参数校验（名称空/数量≤0/日期格式）→ 4000', async () => {
+    const catId = await ensureCategory()
+    const emptyName = await supertest(app).post('/api/materials/arrivals').set(h()).send({ arrivedAt: '2026-11-10', items: [{ categoryId: catId, name: '', qty: 1 }] })
+    expect(emptyName.body.code).toBe(4000)
+    const badQty = await supertest(app).post('/api/materials/arrivals').set(h()).send({ arrivedAt: '2026-11-10', items: [{ categoryId: catId, name: 'X', qty: 0 }] })
+    expect(badQty.body.code).toBe(4000)
+    const badDate = await supertest(app).post('/api/materials/arrivals').set(h()).send({ arrivedAt: '2026/11/10', items: [{ categoryId: catId, name: 'X', qty: 1 }] })
+    expect(badDate.body.code).toBe(4000)
+  })
+
+  it('T5 流转：领用→回收→处置 状态机 + T8 科室领用联动物料账', async () => {
+    const ids = globalThis.__matIds || []
+    expect(ids.length).toBeGreaterThanOrEqual(2)
+    // 领用（发给科室 → 写物料账联动）
+    const issue = await supertest(app).post('/api/materials/issues').set(h()).send({
+      materialIds: [ids[0], ids[1]], receiveUnitType: 'section', receiveUnitCode: 'SEC1', receiveUnitName: '某科室', issueDate: '2026-11-12'
+    })
+    expect(issue.body.code).toBe(0)
+    expect(issue.body.data.qty).toBe(2)
+    expect(issue.body.data.receiveUnitName).toBe('某科室')
+    const detail = await supertest(app).get(`/api/materials/materials/${ids[0]}`).set(h())
+    expect(detail.body.data.status).toBe('issued')
+
+    // T8：物料账领用记录数量/编号一致
+    const linked = db.prepare(`SELECT * FROM material_issues WHERE material_issue_id = ?`).get(issue.body.data.id)
+    expect(linked).toBeTruthy()
+    expect(linked.qty).toBe(2)
+    expect(linked.material_codes.split(',').length).toBe(2)
+
+    // 回收第一件
+    const rec = await supertest(app).post('/api/materials/recycles').set(h()).send({ materialId: ids[0], recycleDate: '2026-11-13' })
+    expect(rec.body.code).toBe(0)
+    const d2 = await supertest(app).get(`/api/materials/materials/${ids[0]}`).set(h())
+    expect(d2.body.data.status).toBe('recycled')
+
+    // 处置第二件（issued→disposed 允许），记收入
+    const disp = await supertest(app).post('/api/materials/disposals').set(h()).send({
+      categoryId: null, disposeType: '报废', items: [{ materialId: ids[1], qty: 1, income: 50 }], disposeDate: '2026-11-14'
+    })
+    expect(disp.body.code).toBe(0)
+    expect(disp.body.data.totalIncome).toBe(50)
+    const d3 = await supertest(app).get(`/api/materials/materials/${ids[1]}`).set(h())
+    expect(d3.body.data.status).toBe('disposed')
+  })
+
+  it('T5 状态机：已回收材料不可再领用（recycled→issued 非法）→ 4000', async () => {
+    const catId = await ensureCategory()
+    const arr = await supertest(app).post('/api/materials/arrivals').set(h()).send({ arrivedAt: '2026-11-10', items: [{ categoryId: catId, name: '直发件', qty: 1 }] })
+    const mid = arr.body.data.list[0].id
+    const rec = await supertest(app).post('/api/materials/recycles').set(h()).send({ materialId: mid, recycleDate: '2026-11-13' })
+    expect(rec.body.code).toBe(0)
+    const issue = await supertest(app).post('/api/materials/issues').set(h()).send({ materialIds: [mid], receiveUnitType: 'workshop', receiveUnitCode: 'W1', receiveUnitName: '一车间', issueDate: '2026-11-14' })
+    expect(issue.body.code).toBe(4000)
+  })
+
+  it('T7 按月汇总 / T9 概览：结构正确', async () => {
+    const monthly = await supertest(app).get('/api/materials/stats/monthly').set(h())
+    expect(monthly.body.code).toBe(0)
+    expect(Array.isArray(monthly.body.data.purchase)).toBe(true)
+    expect(Array.isArray(monthly.body.data.dispose)).toBe(true)
+    expect(Array.isArray(monthly.body.data.flow)).toBe(true)
+    const ov = await supertest(app).get('/api/materials/dashboard/overview').set(h())
+    expect(ov.body.code).toBe(0)
+    expect(ov.body.data).toHaveProperty('planStatus')
+    expect(ov.body.data).toHaveProperty('purchaseAmount')
+    expect(ov.body.data).toHaveProperty('disposeIncome')
+    expect(ov.body.data).toHaveProperty('materialByStatus')
+  })
+
+  it('T10 角色门禁：有模块访问权但无角色 → 写动作 4031', async () => {
+    // 新建一个无权色的用户，仅授予模块访问权（绕过 4030），验证 4031 角色拦截
+    const info = db.prepare(`INSERT INTO users (user_no, name, role, dept_code, dept_name, status, password_hash) VALUES (?, ?, ?, ?, ?, 'active', ?)`).run('T002', '无角色员', 1, '01', '综合科', 'x')
+    const noRoleId = Number(info.lastInsertRowid)
+    db.prepare(`INSERT INTO module_access (user_id, module_code, granted_by) VALUES (?, 'materials', ?)`).run(noRoleId, globalThis.__userId)
+    const noRoleToken = signToken(noRoleId)
+    const r = await supertest(app).post('/api/materials/plans').set('Authorization', `Bearer ${noRoleToken}`).send({
+      month: '2026-11', planType: 'workshop', unitCode: 'W1', unitName: '一车间', items: [{ materialName: 'X', plannedQty: 1, referencePrice: 1 }]
+    })
+    expect(r.body.code).toBe(4031)
   })
 })

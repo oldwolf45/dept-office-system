@@ -305,3 +305,168 @@ export async function voidPurchase(req, res) {
   logModel.addOperationLog({ operatorId: me.id, operatorName: me.name, actionType: 'void_purchase', targetType: 'purchase', targetId: id, detail: { reason } });
   return ok(res, updated, '已作废');
 }
+
+// ============ 到货与编号（T4）============
+// POST /api/materials/arrivals —— 到货登记 + 批量生成 CL 编号
+export async function createArrival(req, res) {
+  const me = req.currentUser;
+  const body = req.body || {};
+  const arrivedAt = String(body.arrivedAt || '').trim();
+  const items = Array.isArray(body.items) ? body.items : [];
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(arrivedAt)) return fail(res, 4000, '到货日期格式应为 YYYY-MM-DD');
+  if (!items.length) return fail(res, 4000, '到货明细至少一项');
+  for (const it of items) {
+    if (!String(it.name || '').trim()) return fail(res, 4000, '物料名称不能为空');
+    if (!(Number(it.qty) > 0)) return fail(res, 4000, `物料「${it.name || '?'}」数量须大于0`);
+  }
+  try {
+    const created = materialsModel.createArrival({
+      purchaseId: body.purchaseId ? Number(body.purchaseId) : null,
+      arrivedAt,
+      items: items.map((it) => ({ categoryId: it.categoryId ? Number(it.categoryId) : null, name: String(it.name).trim(), spec: it.spec || '', unit: it.unit || '', qty: Number(it.qty) })),
+      createdBy: me.id,
+      operatorName: me.name
+    });
+    logModel.addOperationLog({ operatorId: me.id, operatorName: me.name, actionType: 'arrive_material', targetType: 'material', targetId: created[0] ? created[0].id : 0, detail: { arrivedAt, count: created.length } });
+    return ok(res, { count: created.length, list: created }, '已生成材料编号');
+  } catch (e) {
+    return fail(res, e.code || 5000, e.message || '到货登记失败');
+  }
+}
+
+// GET /api/materials?code=&name=&categoryId=&status=
+export async function listMaterials(req, res) {
+  const code = String(req.query.code || '');
+  const name = String(req.query.name || '');
+  const categoryId = Number(req.query.categoryId) || 0;
+  const status = String(req.query.status || '');
+  return ok(res, { list: materialsModel.listMaterials({ code, name, categoryId, status }) });
+}
+
+// GET /api/materials/:id —— 详情含生命周期事件
+export async function getMaterial(req, res) {
+  const id = Number(req.params.id);
+  const m = materialsModel.findMaterial(id);
+  if (!m) return fail(res, 4040, '材料不存在');
+  return ok(res, { ...m, events: materialsModel.listMaterialEvents(id) });
+}
+
+// ============ 领用/回收/处置（T5）============
+// POST /api/materials/issues —— 领用（LL 编号）
+export async function createIssue(req, res) {
+  const me = req.currentUser;
+  const body = req.body || {};
+  const materialIds = Array.isArray(body.materialIds) ? body.materialIds.map((x) => Number(x)).filter((x) => x) : [];
+  const receiveUnitType = body.receiveUnitType === 'section' ? 'section' : 'workshop';
+  const issueDate = String(body.issueDate || '').trim() || todayDate();
+  if (!materialIds.length) return fail(res, 4000, '请选择至少一件材料');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(issueDate)) return fail(res, 4000, '领用日期格式应为 YYYY-MM-DD');
+  if (!String(body.receiveUnitCode || '').trim() || !String(body.receiveUnitName || '').trim()) return fail(res, 4000, '请填写领用单位');
+  const issueNo = nextDocNo('issue_records', 'issue_no', 'LL');
+  try {
+    const created = materialsModel.createIssue({
+      issueNo,
+      purchaseId: body.purchaseId ? Number(body.purchaseId) : null,
+      materialIds,
+      receiveUnitType,
+      receiveUnitCode: String(body.receiveUnitCode).trim(),
+      receiveUnitName: String(body.receiveUnitName).trim(),
+      handler: String(body.handler || '').trim(),
+      issueDate,
+      createdBy: me.id,
+      operatorName: me.name
+    });
+    logModel.addOperationLog({ operatorId: me.id, operatorName: me.name, actionType: 'issue_material', targetType: 'issue_record', targetId: created.id, detail: { issueNo, qty: materialIds.length, receiveUnitName: created.receiveUnitName } });
+    return ok(res, created, '已登记领用');
+  } catch (e) {
+    return fail(res, e.code || 5000, e.message || '领用失败');
+  }
+}
+
+// POST /api/materials/recycles —— 回收（issued→recycled）
+export async function createRecycle(req, res) {
+  const me = req.currentUser;
+  const body = req.body || {};
+  const materialId = Number(body.materialId);
+  const recycleDate = String(body.recycleDate || '').trim() || todayDate();
+  if (!materialId) return fail(res, 4000, '请选择材料');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(recycleDate)) return fail(res, 4000, '回收日期格式应为 YYYY-MM-DD');
+  try {
+    const created = materialsModel.createRecycle({
+      issueRecordId: body.issueRecordId ? Number(body.issueRecordId) : null,
+      materialId,
+      qty: Number(body.qty) || 1,
+      handler: String(body.handler || '').trim(),
+      recycleDate,
+      createdBy: me.id,
+      operatorName: me.name
+    });
+    logModel.addOperationLog({ operatorId: me.id, operatorName: me.name, actionType: 'recycle_material', targetType: 'recycle_record', targetId: created.id, detail: { materialId } });
+    return ok(res, created, '已登记回收');
+  } catch (e) {
+    return fail(res, e.code || 5000, e.message || '回收失败');
+  }
+}
+
+// POST /api/materials/disposals —— 处置批次（CZ 编号）
+export async function createDisposal(req, res) {
+  const me = req.currentUser;
+  const body = req.body || {};
+  const items = Array.isArray(body.items) ? body.items : [];
+  const disposeDate = String(body.disposeDate || '').trim() || todayDate();
+  if (!items.length) return fail(res, 4000, '处置明细至少一项');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(disposeDate)) return fail(res, 4000, '处置日期格式应为 YYYY-MM-DD');
+  for (const it of items) {
+    if (!Number(it.materialId)) return fail(res, 4000, '处置明细须关联材料');
+    if (!(Number(it.qty) > 0)) return fail(res, 4000, '处置数量须大于0');
+  }
+  const disposalNo = nextDocNo('disposal_batches', 'disposal_no', 'CZ');
+  try {
+    const created = materialsModel.createDisposalBatch({
+      disposalNo,
+      categoryId: body.categoryId ? Number(body.categoryId) : null,
+      disposeType: body.disposeType || null,
+      items: items.map((it) => ({ materialId: Number(it.materialId), name: it.name || '', qty: Number(it.qty), income: Number(it.income) || 0 })),
+      handler: String(body.handler || '').trim(),
+      disposeDate,
+      createdBy: me.id,
+      operatorName: me.name
+    });
+    logModel.addOperationLog({ operatorId: me.id, operatorName: me.name, actionType: 'dispose_material', targetType: 'disposal_batch', targetId: created.id, detail: { disposalNo, totalIncome: created.totalIncome } });
+    return ok(res, created, '已登记处置');
+  } catch (e) {
+    return fail(res, e.code || 5000, e.message || '处置失败');
+  }
+}
+
+// GET /api/materials/issues?receiveUnitType=&status=
+export async function listIssues(req, res) {
+  const receiveUnitType = String(req.query.receiveUnitType || '');
+  const status = String(req.query.status || '');
+  return ok(res, { list: materialsModel.listIssues({ receiveUnitType, status }) });
+}
+
+// GET /api/materials/disposals?status=
+export async function listDisposalBatches(req, res) {
+  const status = String(req.query.status || '');
+  return ok(res, { list: materialsModel.listDisposalBatches({ status }) });
+}
+
+// GET /api/materials/disposals/:id —— 含明细
+export async function getDisposalBatch(req, res) {
+  const id = Number(req.params.id);
+  const b = materialsModel.findDisposalBatch(id);
+  if (!b) return fail(res, 4040, '处置批次不存在');
+  return ok(res, { ...b, items: materialsModel.listDisposalItems(id) });
+}
+
+// ============ 汇总/概览（T6/T7/T9）============
+// GET /api/materials/stats/monthly —— 按月收支与流转数量
+export async function getMonthlySummary(req, res) {
+  return ok(res, materialsModel.summaryMonthly());
+}
+
+// GET /api/materials/dashboard/overview —— 首页工作台概览
+export async function getOverview(req, res) {
+  return ok(res, materialsModel.overview());
+}

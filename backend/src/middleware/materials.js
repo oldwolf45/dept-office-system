@@ -12,3 +12,17 @@ export function requireMaterialsAccess(req, res, next) {
   }
   return next();
 }
+
+// 按钮级权限（T10）：按模块角色拒绝写操作。仅在已通过 requireMaterialsAccess 后使用。
+// roles 为该动作允许的角色集合；用户无任一角色 → 4031。
+export function requireMaterialsRole(...roles) {
+  return (req, res, next) => {
+    if (!req.currentUser) {
+      return fail(res, 4010, '未登录或登录已过期', 401);
+    }
+    if (!materialsModel.userHasModuleRole(req.currentUser.id, roles)) {
+      return fail(res, 4031, '当前角色无权执行该操作', 403);
+    }
+    return next();
+  };
+}
