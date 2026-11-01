@@ -35,6 +35,7 @@ export interface MaterialCategory {
   code: string | null
   name: string
   status: 'active' | 'disabled'
+  sortOrder: number
 }
 
 export interface FinanceCategory {
@@ -42,7 +43,32 @@ export interface FinanceCategory {
   name: string
   type: 'income' | 'expense'
   status: 'active' | 'disabled'
+  sortOrder: number
 }
 
 /** 材料状态机（开发计划 §2.3 / T5） */
 export type MaterialStatus = 'in_stock' | 'issued' | 'recycled' | 'disposed'
+
+// ---------- 基础数据（T1）----------
+export interface CreateMaterialCategoryParams {
+  code?: string | null
+  name: string
+  sortOrder?: number
+}
+
+export interface UpdateMaterialCategoryParams {
+  name?: string
+  sortOrder?: number
+}
+
+export interface CreateFinanceCategoryParams {
+  name: string
+  type: 'income' | 'expense'
+  sortOrder?: number
+}
+
+export interface UpdateFinanceCategoryParams {
+  name?: string
+  type?: 'income' | 'expense'
+  sortOrder?: number
+}

@@ -81,6 +81,47 @@ describe('材料模块 T0 骨架', () => {
   })
 })
 
+describe('材料模块 T1 基础数据', () => {
+  const h = () => ({ Authorization: `Bearer ${globalThis.__token}` })
+
+  it('材料类别：新增→列表→编辑→停用(未用)→启用', async () => {
+    const c = await supertest(app).post('/api/materials/categories').set(h()).send({ code: '05', name: '钢材' })
+    expect(c.body.code).toBe(0)
+    const id = c.body.data.id
+    const list = await supertest(app).get('/api/materials/categories/manage').set(h())
+    expect(list.body.data.list.some((x) => x.id === id)).toBe(true)
+    const up = await supertest(app).put(`/api/materials/categories/${id}`).set(h()).send({ name: '钢材X' })
+    expect(up.body.code).toBe(0)
+    expect(up.body.data.name).toBe('钢材X')
+    const dis = await supertest(app).post(`/api/materials/categories/${id}/disable`).set(h())
+    expect(dis.body.code).toBe(0)
+    expect(dis.body.data.status).toBe('disabled')
+    const en = await supertest(app).post(`/api/materials/categories/${id}/enable`).set(h())
+    expect(en.body.data.status).toBe('active')
+  })
+
+  it('材料类别：已用不可停用', async () => {
+    const c = await supertest(app).post('/api/materials/categories').set(h()).send({ name: '线缆' })
+    const id = c.body.data.id
+    db.prepare(
+      `INSERT INTO materials (material_code, name, status, arrived_at, category_id, created_by)
+       VALUES (?, '某材料', 'in_stock', '2026-11-01', ?, ?)`
+    ).run(materialsService.nextMaterialCode('99', '20261101'), id, globalThis.__userId)
+    const dis = await supertest(app).post(`/api/materials/categories/${id}/disable`).set(h())
+    expect(dis.body.code).toBe(4000)
+  })
+
+  it('收支分类：种子3条 + 新增→停用→启用', async () => {
+    const f = await supertest(app).post('/api/materials/finance-categories').set(h()).send({ name: '运费', type: 'expense' })
+    expect(f.body.code).toBe(0)
+    const id = f.body.data.id
+    const dis = await supertest(app).post(`/api/materials/finance-categories/${id}/disable`).set(h())
+    expect(dis.body.data.status).toBe('disabled')
+    const en = await supertest(app).post(`/api/materials/finance-categories/${id}/enable`).set(h())
+    expect(en.body.data.status).toBe('active')
+  })
+})
+
 describe('材料模块访问权（M1）', () => {
   it('未登录访问 /api/materials/me → 4010', async () => {
     const res = await supertest(app).get('/api/materials/me')
