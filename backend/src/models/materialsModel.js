@@ -171,6 +171,45 @@ const materialsModel = {
       `UPDATE plans SET status = ?, reject_reason = ?, updated_at = datetime('now','localtime') WHERE id = ? AND deleted_at IS NULL`
     ).run(status, rejectReason, id);
     return this.findPlan(id);
+  },
+
+  // ---- 采购（T3）----
+  createPurchase({ purchaseNo, planId, categoryId, supplier, itemDesc, amount, fundCategoryId, purchaseDate, handler, createdBy }) {
+    const info = db.prepare(
+      `INSERT INTO purchases (purchase_no, plan_id, category_id, supplier, item_desc, amount, fund_category_id, purchase_date, handler, status, created_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'normal', ?)`
+    ).run(purchaseNo, planId ?? null, categoryId ?? null, supplier || null, itemDesc, amount, fundCategoryId ?? null, purchaseDate, handler || null, createdBy ?? null);
+    return this.findPurchase(Number(info.lastInsertRowid));
+  },
+
+  findPurchase(id) {
+    return db.prepare(
+      `SELECT id, purchase_no AS purchaseNo, plan_id AS planId, category_id AS categoryId, supplier, item_desc AS itemDesc,
+              amount, fund_category_id AS fundCategoryId, purchase_date AS purchaseDate, handler, status, void_reason AS voidReason,
+              created_by AS createdBy, created_at AS createdAt, updated_at AS updatedAt
+       FROM purchases WHERE id = ? AND deleted_at IS NULL`
+    ).get(id);
+  },
+
+  listPurchases({ month = '', categoryId = 0, fundCategoryId = 0, status = '' } = {}) {
+    const where = ['deleted_at IS NULL'];
+    const params = [];
+    if (month) { where.push('purchase_date LIKE ?'); params.push(`${month}%`); }
+    if (categoryId) { where.push('category_id = ?'); params.push(categoryId); }
+    if (fundCategoryId) { where.push('fund_category_id = ?'); params.push(fundCategoryId); }
+    if (status) { where.push('status = ?'); params.push(status); }
+    return db.prepare(
+      `SELECT id, purchase_no AS purchaseNo, plan_id AS planId, category_id AS categoryId, supplier, item_desc AS itemDesc,
+              amount, fund_category_id AS fundCategoryId, purchase_date AS purchaseDate, handler, status, created_at AS createdAt
+       FROM purchases WHERE ${where.join(' AND ')} ORDER BY id DESC`
+    ).all(...params);
+  },
+
+  voidPurchase(id, reason) {
+    db.prepare(
+      `UPDATE purchases SET status = 'void', void_reason = ?, updated_at = datetime('now','localtime') WHERE id = ? AND deleted_at IS NULL`
+    ).run(reason, id);
+    return this.findPurchase(id);
   }
 };
 

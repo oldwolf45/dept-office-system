@@ -131,3 +131,35 @@ export interface PlanSummaryResult {
   plans: Plan[]
   byUnit: PlanUnitSummary[]
 }
+
+// ---------- 采购管理（T3）----------
+export type PurchaseStatus = 'normal' | 'void'
+
+export interface Purchase {
+  id: number
+  purchaseNo: string
+  planId: number | null
+  categoryId: number | null
+  supplier: string | null
+  itemDesc: string
+  amount: number
+  fundCategoryId: number | null
+  purchaseDate: string
+  handler: string | null
+  status: PurchaseStatus
+  voidReason: string | null
+  createdBy: number | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface CreatePurchaseParams {
+  planId?: number | null
+  categoryId?: number | null
+  supplier?: string
+  itemDesc: string
+  amount: number
+  fundCategoryId?: number | null
+  purchaseDate: string
+  handler?: string
+}

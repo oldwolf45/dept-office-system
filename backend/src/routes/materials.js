@@ -21,7 +21,11 @@ import {
   submitPlan,
   approvePlan,
   rejectPlan,
-  summaryPlans
+  summaryPlans,
+  createPurchase,
+  listPurchases,
+  getPurchase,
+  voidPurchase
 } from '../controllers/materialsController.js';
 
 const router = express.Router();
@@ -56,5 +60,11 @@ router.get('/plans/:id', getPlan);
 router.post('/plans/:id/submit', submitPlan);
 router.post('/plans/:id/approve', approvePlan);
 router.post('/plans/:id/reject', rejectPlan);
+
+// 采购管理（T3）：登记→查询→作废
+router.get('/purchases', listPurchases);
+router.post('/purchases', createPurchase);
+router.get('/purchases/:id', getPurchase);
+router.post('/purchases/:id/void', voidPurchase);
 
 export default router;

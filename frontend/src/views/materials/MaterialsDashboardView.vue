@@ -53,16 +53,22 @@ onMounted(async () => {
       <el-alert class="mb-4" type="info" :closable="false" show-icon
         title="模块骨架已接入（v1.1 / T0）" description="下方为各角色工作区占位，计划/采购/到货/领用/回收/处置/图表/生命周期等功能将按开发计划在后续任务中逐步填充。" />
 
-      <div class="mb-4 flex gap-2">
+      <div class="mb-4 flex gap-2 flex-wrap">
         <router-link to="/materials/plans"><el-button type="primary" plain>需求计划</el-button></router-link>
+        <router-link to="/materials/purchases"><el-button type="primary" plain>采购管理</el-button></router-link>
         <router-link to="/materials/categories"><el-button type="primary" plain>材料类别</el-button></router-link>
         <router-link to="/materials/finance"><el-button type="primary" plain>收支分类</el-button></router-link>
       </div>
 
       <el-row :gutter="16">
         <el-col v-for="card in featureCards" :key="card.key" :xs="24" :sm="12" :md="8" class="mb-4">
-          <el-card shadow="hover" :body-style="{ cursor: card.key === 'plan' ? 'pointer' : 'default' }">
+          <el-card shadow="hover" :body-style="{ cursor: ['plan', 'purchase'].includes(card.key) ? 'pointer' : 'default' }">
             <router-link v-if="card.key === 'plan'" to="/materials/plans" class="no-underline">
+              <div class="font-medium">{{ card.title }}</div>
+              <div class="text-sm text-gray-500 mt-1">{{ card.desc }}</div>
+              <el-tag class="mt-2" size="small" type="success">可用</el-tag>
+            </router-link>
+            <router-link v-else-if="card.key === 'purchase'" to="/materials/purchases" class="no-underline">
               <div class="font-medium">{{ card.title }}</div>
               <div class="text-sm text-gray-500 mt-1">{{ card.desc }}</div>
               <el-tag class="mt-2" size="small" type="success">可用</el-tag>

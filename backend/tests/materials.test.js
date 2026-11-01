@@ -235,3 +235,48 @@ describe('材料模块 T2 计划管理', () => {
     expect(s1.rejected).toBeGreaterThanOrEqual(1)
   })
 })
+
+describe('材料模块 T3 采购管理', () => {
+  const h = () => ({ Authorization: `Bearer ${globalThis.__token}` })
+
+  it('登记采购：CG 单据号 + 状态 normal + 金额入库', async () => {
+    const r = await supertest(app).post('/api/materials/purchases').set(h()).send({
+      itemDesc: '采购氧气瓶', amount: 1200.5, purchaseDate: '2026-11-02', supplier: '某供应商', handler: '张三'
+    })
+    expect(r.body.code).toBe(0)
+    expect(r.body.data.status).toBe('normal')
+    expect(/^CG\d{11}$/.test(r.body.data.purchaseNo)).toBe(true)
+    expect(r.body.data.amount).toBe(1200.5)
+  })
+
+  it('登记采购：参数校验（摘要空/金额负/日期格式）→ 4000', async () => {
+    const emptyDesc = await supertest(app).post('/api/materials/purchases').set(h()).send({ itemDesc: '', amount: 10 })
+    expect(emptyDesc.body.code).toBe(4000)
+    const neg = await supertest(app).post('/api/materials/purchases').set(h()).send({ itemDesc: 'X', amount: -5 })
+    expect(neg.body.code).toBe(4000)
+    const badDate = await supertest(app).post('/api/materials/purchases').set(h()).send({ itemDesc: 'X', amount: 5, purchaseDate: '2026/11/02' })
+    expect(badDate.body.code).toBe(4000)
+  })
+
+  it('作废：normal→void 必填意见；重复作废→4000', async () => {
+    const c = await supertest(app).post('/api/materials/purchases').set(h()).send({ itemDesc: '采购焊条', amount: 300, purchaseDate: '2026-11-03' })
+    const id = c.body.data.id
+    const noReason = await supertest(app).post(`/api/materials/purchases/${id}/void`).set(h()).send({})
+    expect(noReason.body.code).toBe(4000)
+    const voided = await supertest(app).post(`/api/materials/purchases/${id}/void`).set(h()).send({ reason: '重复采购' })
+    expect(voided.body.code).toBe(0)
+    expect(voided.body.data.status).toBe('void')
+    expect(voided.body.data.voidReason).toBe('重复采购')
+    const again = await supertest(app).post(`/api/materials/purchases/${id}/void`).set(h()).send({ reason: 'x' })
+    expect(again.body.code).toBe(4000)
+  })
+
+  it('列表：按月份过滤', async () => {
+    await supertest(app).post('/api/materials/purchases').set(h()).send({ itemDesc: '采购螺栓', amount: 80, purchaseDate: '2026-11-05' })
+    const r = await supertest(app).get('/api/materials/purchases?month=2026-11').set(h())
+    expect(r.body.code).toBe(0)
+    expect(Array.isArray(r.body.data.list)).toBe(true)
+    expect(r.body.data.list.length).toBeGreaterThanOrEqual(3)
+    expect(r.body.data.list.every((p) => p.purchaseDate.startsWith('2026-11'))).toBe(true)
+  })
+})

@@ -1,7 +1,7 @@
 import { ok, fail } from '../middleware/response.js';
 import materialsModel from '../models/materialsModel.js';
 import logModel from '../models/logModel.js';
-import { nextDocNo } from '../services/materialsService.js';
+import { nextDocNo, todayDate } from '../services/materialsService.js';
 
 // GET /api/materials/me —— 当前用户材料模块访问态与角色（前端渲染工作区壳的依据）
 export async function me(req, res) {
@@ -242,4 +242,66 @@ export async function summaryPlans(req, res) {
     if (p.status === 'rejected') byUnit[p.unitName].rejected += 1;
   }
   return ok(res, { month, total: all.length, plans: all, byUnit: Object.values(byUnit) });
+}
+
+// ============ 采购管理（T3）============
+// POST /api/materials/purchases —— 按类登记采购（CG 单据号）
+export async function createPurchase(req, res) {
+  const me = req.currentUser;
+  const body = req.body || {};
+  const itemDesc = String(body.itemDesc || '').trim();
+  const amount = Number(body.amount);
+  const purchaseDate = String(body.purchaseDate || '').trim() || todayDate();
+  if (!itemDesc) return fail(res, 4000, '采购摘要不能为空');
+  if (!(amount >= 0)) return fail(res, 4000, '金额须为非负数');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(purchaseDate)) return fail(res, 4000, '采购日期格式应为 YYYY-MM-DD');
+  const purchaseNo = nextDocNo('purchases', 'purchase_no', 'CG');
+  const created = materialsModel.createPurchase({
+    purchaseNo,
+    planId: body.planId ? Number(body.planId) : null,
+    categoryId: body.categoryId ? Number(body.categoryId) : null,
+    supplier: String(body.supplier || '').trim(),
+    itemDesc,
+    amount,
+    fundCategoryId: body.fundCategoryId ? Number(body.fundCategoryId) : null,
+    purchaseDate,
+    handler: String(body.handler || '').trim(),
+    createdBy: me.id
+  });
+  logModel.addOperationLog({
+    operatorId: me.id, operatorName: me.name, actionType: 'create_purchase',
+    targetType: 'purchase', targetId: created.id, detail: { purchaseNo, itemDesc, amount }
+  });
+  return ok(res, created, '已登记采购');
+}
+
+// GET /api/materials/purchases?month=&categoryId=&fundCategoryId=&status=
+export async function listPurchases(req, res) {
+  const month = String(req.query.month || '');
+  const categoryId = Number(req.query.categoryId) || 0;
+  const fundCategoryId = Number(req.query.fundCategoryId) || 0;
+  const status = String(req.query.status || '');
+  return ok(res, { list: materialsModel.listPurchases({ month, categoryId, fundCategoryId, status }) });
+}
+
+// GET /api/materials/purchases/:id
+export async function getPurchase(req, res) {
+  const id = Number(req.params.id);
+  const p = materialsModel.findPurchase(id);
+  if (!p) return fail(res, 4040, '采购单不存在');
+  return ok(res, p);
+}
+
+// POST /api/materials/purchases/:id/void  normal→void（作废必填意见）
+export async function voidPurchase(req, res) {
+  const me = req.currentUser;
+  const id = Number(req.params.id);
+  const p = materialsModel.findPurchase(id);
+  if (!p) return fail(res, 4040, '采购单不存在');
+  if (p.status !== 'normal') return fail(res, 4000, '仅正常状态可作废');
+  const reason = String((req.body || {}).reason || '').trim();
+  if (!reason) return fail(res, 4000, '作废须填写意见');
+  const updated = materialsModel.voidPurchase(id, reason);
+  logModel.addOperationLog({ operatorId: me.id, operatorName: me.name, actionType: 'void_purchase', targetType: 'purchase', targetId: id, detail: { reason } });
+  return ok(res, updated, '已作废');
 }

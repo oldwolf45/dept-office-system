@@ -14,6 +14,13 @@ export function todayYmd() {
   return new Date(d.getTime() - off).toISOString().slice(0, 10).replace(/-/g, '');
 }
 
+/** 本地日期 YYYY-MM-DD（采购日期等字段用） */
+export function todayDate() {
+  const d = new Date();
+  const off = d.getTimezoneOffset() * 60000;
+  return new Date(d.getTime() - off).toISOString().slice(0, 10);
+}
+
 /**
  * 生成单据编号：prefix + YYYYMMDD + 3 位流水（当日递增、唯一）。
  * @param {string} table 单据表名

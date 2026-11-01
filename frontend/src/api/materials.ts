@@ -9,7 +9,9 @@ import type {
   UpdateFinanceCategoryParams,
   Plan,
   CreatePlanParams,
-  PlanSummaryResult
+  PlanSummaryResult,
+  Purchase,
+  CreatePurchaseParams
 } from '@/types/materials'
 
 // 材料模块接口统一走本文件（开发计划 §2.3-3：组件只调 api 函数，不直接写 axios）
@@ -80,4 +82,18 @@ export function rejectPlan(id: number, reason: string): Promise<Plan> {
 }
 export function summaryPlans(month: string): Promise<PlanSummaryResult> {
   return request.get<unknown, PlanSummaryResult>('/materials/plans/summary', { params: { month } })
+}
+
+// ---------- 采购管理（T3）----------
+export function listPurchases(params: { month?: string; categoryId?: number; fundCategoryId?: number; status?: string } = {}): Promise<Purchase[]> {
+  return request.get<unknown, Purchase[]>('/materials/purchases', { params })
+}
+export function getPurchase(id: number): Promise<Purchase> {
+  return request.get<unknown, Purchase>(`/materials/purchases/${id}`)
+}
+export function createPurchase(data: CreatePurchaseParams): Promise<Purchase> {
+  return request.post<unknown, Purchase>('/materials/purchases', data)
+}
+export function voidPurchase(id: number, reason: string): Promise<Purchase> {
+  return request.post<unknown, Purchase>(`/materials/purchases/${id}/void`, { reason })
 }
