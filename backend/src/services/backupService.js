@@ -21,13 +21,19 @@ fs.mkdirSync(BACKUP_DIR, { recursive: true });
 const CONFIG_WHITELIST = ['company_name', 'stall_days'];
 
 // 清单记录数覆盖的业务表（manifest 校验用）
+// 说明：v1.1 材料模块新增 13 张表，必须一并纳入校验，否则恢复后材料数据是否完整无从判断。
+// 老备份包的 manifest 里没有这些键，swapFromZip 按 manifest.recordCounts 的键遍历，缺键自动跳过，向后兼容。
 const RECORD_COUNT_TABLES = [
   'users', 'login_logs', 'operation_logs', 'delegations', 'works', 'work_transfers', 'dicts',
   'progress_records', 'attachments', 'annotations', 'summary_archives',
   'material_items', 'material_plans', 'material_receipts', 'material_batches', 'material_issues',
   'stocktakings', 'stocktaking_items', 'accounting_approvals',
   'fund_plans', 'fund_expenses', 'fund_settlements', 'monthly_reports',
-  'notice_reads', 'backup_logs'
+  'notice_reads', 'backup_logs',
+  // v1.1 材料模块（T0 新增 13 表）
+  'material_categories', 'finance_categories', 'plans', 'plan_items', 'purchases', 'materials',
+  'material_events', 'issue_records', 'recycle_records', 'disposal_batches', 'disposal_items',
+  'module_role_map', 'module_access'
 ];
 
 function biz(code, message) {
