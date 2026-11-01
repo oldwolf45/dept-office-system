@@ -158,6 +158,12 @@ const router = createRouter({
           component: () => import('@/views/materials/StatsView.vue'),
           meta: { menu: 'materials' }
         },
+        {
+          path: 'materials/roles',
+          name: 'materials-roles',
+          component: () => import('@/views/materials/RoleConfigView.vue'),
+          meta: { menu: 'materials' }
+        },
         { path: '', redirect: '/dashboard' }
       ]
     }

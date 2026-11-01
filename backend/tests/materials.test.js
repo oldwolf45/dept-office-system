@@ -476,3 +476,120 @@ describe('材料模块 T11 总验收：两月模拟全流程', () => {
     expect(Number(ov.body.data.purchaseAmount)).toBeGreaterThanOrEqual(3000)
   })
 })
+
+// T10 补口：角色配置（PRD「人员 ↔ 模块角色 ↔ 单位 映射初值在账号维护时配置」）
+// 背景：此前只做了角色读取与门禁，没有任何写入入口，上线后 module_role_map 为空、
+// 所有人写按钮都不渲染，模块实际不可用。本组用例守住这条链路。
+describe('T10 角色配置', () => {
+  const h = (t) => ({ Authorization: `Bearer ${t}` })
+  let adminId, adminToken, plainId, plainToken
+
+  beforeAll(() => {
+    const a = db.prepare(
+      `INSERT INTO users (user_no, name, role, dept_code, dept_name, status, password_hash)
+       VALUES ('T101', '角色管理员', 4, '01', '综合科', 'active', 'x')`
+    ).run()
+    adminId = Number(a.lastInsertRowid)
+    const b = db.prepare(
+      `INSERT INTO users (user_no, name, role, dept_code, dept_name, status, password_hash)
+       VALUES ('T102', '待授权员', 1, '01', '综合科', 'active', 'x')`
+    ).run()
+    plainId = Number(b.lastInsertRowid)
+    adminToken = signToken(adminId)
+    plainToken = signToken(plainId)
+    // 前面用例已往 module_access 插入过白名单行，此处需显式授权才能过 4030
+    for (const id of [adminId, plainId]) {
+      db.prepare(`INSERT INTO module_access (user_id, module_code, granted_by) VALUES (?, 'materials', ?)`)
+        .run(id, globalThis.__userId)
+    }
+  })
+
+  it('列表返回映射、可授人员与角色/单位类型选项', async () => {
+    const r = await supertest(app).get('/api/materials/roles').set(h(adminToken))
+    expect(r.body.code).toBe(0)
+    const d = r.body.data
+    expect(Array.isArray(d.list)).toBe(true)
+    expect(d.candidates.some((c) => c.id === plainId)).toBe(true)
+    expect(d.roles.map((x) => x.code)).toEqual(['workshop_director', 'workshop_manager', 'supply', 'section_agent'])
+    expect(d.unitTypes.map((x) => x.code)).toEqual(['workshop', 'section'])
+  })
+
+  it('授予后立即生效：/me 带回角色，受角色门禁保护的写动作通过', async () => {
+    const before = await supertest(app).get('/api/materials/me').set(h(plainToken))
+    expect(before.body.data.roles).toEqual([])
+    expect(before.body.data.canManageRoles).toBe(false)
+
+    // 授予前：写采购应被 4031 拦
+    const denied = await supertest(app).post('/api/materials/purchases').set(h(plainToken))
+      .send({ itemDesc: '氧气瓶', amount: 100, purchaseDate: '2026-11-02' })
+    expect(denied.body.code).toBe(4031)
+
+    const granted = await supertest(app).post('/api/materials/roles').set(h(adminToken))
+      .send({ userId: plainId, role: 'supply', unitType: 'section', unitName: '综合科' })
+    expect(granted.body.code).toBe(0)
+    expect(granted.body.data.id).toBeGreaterThan(0)
+
+    const after = await supertest(app).get('/api/materials/me').set(h(plainToken))
+    expect(after.body.data.roles.map((x) => x.role)).toEqual(['supply'])
+    expect(after.body.data.roles[0].roleLabel).toBe('供应科')
+
+    const allowed = await supertest(app).post('/api/materials/purchases').set(h(plainToken))
+      .send({ itemDesc: '氧气瓶', amount: 100, purchaseDate: '2026-11-02' })
+    expect(allowed.body.code).toBe(0)
+  })
+
+  it('重复授予同一角色被拒（4000），换角色可继续授予', async () => {
+    const dup = await supertest(app).post('/api/materials/roles').set(h(adminToken))
+      .send({ userId: plainId, role: 'supply', unitType: 'section', unitName: '综合科' })
+    expect(dup.body.code).toBe(4000)
+    expect(dup.body.message).toContain('已具有该角色')
+
+    // 一人多角色
+    const second = await supertest(app).post('/api/materials/roles').set(h(adminToken))
+      .send({ userId: plainId, role: 'section_agent', unitType: 'section', unitName: '综合科' })
+    expect(second.body.code).toBe(0)
+    const me = await supertest(app).get('/api/materials/me').set(h(plainToken))
+    expect(me.body.data.roles.map((x) => x.role).sort()).toEqual(['section_agent', 'supply'])
+  })
+
+  it('负数例：非法角色 / 非法单位类型 / 缺单位名称 / 不存在人员 均 4000', async () => {
+    const base = { userId: plainId, role: 'supply', unitType: 'section', unitName: '综合科' }
+    const bad = [
+      { ...base, role: 'boss' },
+      { ...base, unitType: 'company' },
+      { ...base, unitName: '' },
+      { ...base, userId: 999999 }
+    ]
+    for (const payload of bad) {
+      const r = await supertest(app).post('/api/materials/roles').set(h(adminToken)).send(payload)
+      expect(r.body.code, JSON.stringify(payload)).toBe(4000)
+    }
+  })
+
+  it('撤销后角色立刻失效，写动作回到 4031，且重复撤回报 4040', async () => {
+    const list = await supertest(app).get('/api/materials/roles').set(h(adminToken))
+    const supply = list.body.data.list.find((x) => x.userId === plainId && x.role === 'supply')
+    expect(supply).toBeTruthy()
+
+    const rv = await supertest(app).post(`/api/materials/roles/${supply.id}/revoke`).set(h(adminToken))
+    expect(rv.body.code).toBe(0)
+
+    const me = await supertest(app).get('/api/materials/me').set(h(plainToken))
+    expect(me.body.data.roles.map((x) => x.role)).toEqual(['section_agent'])
+
+    const denied = await supertest(app).post('/api/materials/purchases').set(h(plainToken))
+      .send({ itemDesc: '氧气瓶', amount: 100, purchaseDate: '2026-11-02' })
+    expect(denied.body.code).toBe(4031)
+
+    const again = await supertest(app).post(`/api/materials/roles/${supply.id}/revoke`).set(h(adminToken))
+    expect(again.body.code).toBe(4040)
+  })
+
+  it('平台层级不足 3 不能查看或配置角色（4030）', async () => {
+    const get = await supertest(app).get('/api/materials/roles').set(h(plainToken))
+    expect(get.body.code).toBe(4030)
+    const post = await supertest(app).post('/api/materials/roles').set(h(plainToken))
+      .send({ userId: plainId, role: 'supply', unitType: 'section', unitName: '综合科' })
+    expect(post.body.code).toBe(4030)
+  })
+})

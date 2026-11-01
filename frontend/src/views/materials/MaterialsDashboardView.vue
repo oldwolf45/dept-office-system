@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { getMaterialsMe, getDashboardOverview } from '@/api/materials'
 import { MATERIAL_ROLE_LABELS } from '@/types/materials'
 import type { MaterialsMeResult, MaterialModuleRoleMap, DashboardOverview } from '@/types/materials'
@@ -9,14 +9,21 @@ const overview = ref<DashboardOverview | null>(null)
 const loading = ref<boolean>(true)
 
 // 各功能入口（T4~T7 已完成，均可点进）
-const featureCards = [
-  { key: 'plan', title: '计划管理', desc: '车间/科室需求填报、审核、全厂汇总', to: '/materials/plans' },
-  { key: 'purchase', title: '采购管理', desc: '按类登记采购与金额、作废', to: '/materials/purchases' },
-  { key: 'arrival', title: '到货与编号', desc: '到货登记、批量生成材料编号', to: '/materials/arrivals' },
-  { key: 'issue', title: '领用/回收/处置', desc: '状态机正向流转、处置收入', to: '/materials/flow' },
-  { key: 'lifecycle', title: '生命周期查询', desc: '按编号/名称追溯全链路时间线', to: '/materials/list' },
-  { key: 'chart', title: '图表汇总', desc: '按月收支对比与流转数量', to: '/materials/stats' }
-]
+// 角色配置只在平台层级 >= 3 时出现（后端同样以 requireLevel(3) 兜住）
+const featureCards = computed(() => {
+  const base = [
+    { key: 'plan', title: '计划管理', desc: '车间/科室需求填报、审核、全厂汇总', to: '/materials/plans' },
+    { key: 'purchase', title: '采购管理', desc: '按类登记采购与金额、作废', to: '/materials/purchases' },
+    { key: 'arrival', title: '到货与编号', desc: '到货登记、批量生成材料编号', to: '/materials/arrivals' },
+    { key: 'issue', title: '领用/回收/处置', desc: '状态机正向流转、处置收入', to: '/materials/flow' },
+    { key: 'lifecycle', title: '生命周期查询', desc: '按编号/名称追溯全链路时间线', to: '/materials/list' },
+    { key: 'chart', title: '图表汇总', desc: '按月收支对比与流转数量', to: '/materials/stats' }
+  ]
+  if (me.value?.canManageRoles) {
+    base.push({ key: 'roles', title: '角色配置', desc: '给人员授予材料模块角色（工段长/车间主任/供应科/科室经办）', to: '/materials/roles' })
+  }
+  return base
+})
 
 function roleText(roles: MaterialModuleRoleMap[]): string {
   if (!roles.length) return '未分配材料模块角色'

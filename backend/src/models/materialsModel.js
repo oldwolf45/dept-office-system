@@ -444,6 +444,63 @@ const materialsModel = {
   userHasModuleRole(userId, roles) {
     const my = this.listModuleRoles(userId).map((r) => r.role);
     return roles.some((r) => my.includes(r));
+  },
+
+  // ---- 角色配置（T10 补口：PRD 要求「人员↔模块角色↔单位」映射在账号维护时配置，
+  //      此前只做了读取与门禁，没有任何写入入口，导致上线后无人有角色、所有写按钮不渲染）----
+
+  // 全部有效映射（附工号姓名与单位），供配置页列表
+  listModuleRoleMap() {
+    const rows = db.prepare(
+      `SELECT m.id, m.user_id AS userId, u.user_no AS userNo, u.name AS userName,
+              u.role AS level, u.dept_name AS deptName,
+              m.role, m.unit_type AS unitType, m.unit_code AS unitCode, m.unit_name AS unitName,
+              m.created_at AS createdAt
+       FROM module_role_map m
+       JOIN users u ON u.id = m.user_id
+       WHERE m.deleted_at IS NULL AND u.deleted_at IS NULL
+       ORDER BY u.user_no, m.role`
+    ).all();
+    return rows.map((r) => ({ ...r, roleLabel: ROLE_LABELS[r.role] || r.role }));
+  },
+
+  // 同一人重复授予同一角色：按 user_id + role 判定（单位仅描述，不参与门禁）
+  findModuleRoleByUserRole(userId, role) {
+    return db.prepare(
+      `SELECT id FROM module_role_map WHERE user_id = ? AND role = ? AND deleted_at IS NULL`
+    ).get(userId, role);
+  },
+
+  addModuleRole({ userId, role, unitType, unitCode, unitName, createdBy = null }) {
+    const info = db.prepare(
+      `INSERT INTO module_role_map (user_id, role, unit_type, unit_code, unit_name, created_by)
+       VALUES (?, ?, ?, ?, ?, ?)`
+    ).run(userId, role, unitType, unitCode, unitName, createdBy);
+    return Number(info.lastInsertRowid);
+  },
+
+  // 软删（撤销授权）；已撤销的返回 0
+  revokeModuleRole(id) {
+    const info = db.prepare(
+      `UPDATE module_role_map SET deleted_at = datetime('now','localtime'), updated_at = datetime('now','localtime')
+       WHERE id = ? AND deleted_at IS NULL`
+    ).run(id);
+    return Number(info.changes);
+  },
+
+  findModuleRoleById(id) {
+    return db.prepare(
+      `SELECT id, user_id AS userId, role, unit_type AS unitType, unit_code AS unitCode, unit_name AS unitName
+       FROM module_role_map WHERE id = ? AND deleted_at IS NULL`
+    ).get(id);
+  },
+
+  // 可授予角色的人员候选：全部在职用户（含 level 与科室，便于按科室挑人）
+  listRoleCandidates() {
+    return db.prepare(
+      `SELECT id, user_no AS userNo, name, role AS level, dept_code AS deptCode, dept_name AS deptName, status
+       FROM users WHERE deleted_at IS NULL AND status = 'active' ORDER BY role DESC, user_no`
+    ).all();
   }
 };
 

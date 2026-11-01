@@ -1,5 +1,5 @@
 import express from 'express';
-import { requireAuth } from '../middleware/auth.js';
+import { requireAuth, requireLevel } from '../middleware/auth.js';
 import { requireMaterialsAccess, requireMaterialsRole } from '../middleware/materials.js';
 import {
   me,
@@ -36,7 +36,10 @@ import {
   listDisposalBatches,
   getDisposalBatch,
   getMonthlySummary,
-  getOverview
+  getOverview,
+  listRoleMap,
+  createRoleMap,
+  revokeRoleMap
 } from '../controllers/materialsController.js';
 
 const router = express.Router();
@@ -46,6 +49,11 @@ router.use(requireMaterialsAccess);
 
 // 当前用户模块访问态与角色（工作区壳渲染依据）
 router.get('/me', me);
+
+// 角色配置（T10 补口）：平台层级 >= 3 才能配，角色归模块管
+router.get('/roles', requireLevel(3), listRoleMap);
+router.post('/roles', requireLevel(3), createRoleMap);
+router.post('/roles/:id/revoke', requireLevel(3), revokeRoleMap);
 
 // 首页工作台概览（T9）/ 按月汇总（T7）
 router.get('/dashboard/overview', getOverview);

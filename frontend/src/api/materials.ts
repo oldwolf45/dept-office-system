@@ -22,7 +22,9 @@ import type {
   DisposalBatch,
   CreateDisposalParams,
   MonthlySummary,
-  DashboardOverview
+  DashboardOverview,
+  ModuleRoleMapResult,
+  GrantRoleParams
 } from '@/types/materials'
 
 // 材料模块接口统一走本文件（开发计划 §2.3-3：组件只调 api 函数，不直接写 axios）
@@ -146,4 +148,15 @@ export function getMonthlySummary(): Promise<MonthlySummary> {
 }
 export function getDashboardOverview(): Promise<DashboardOverview> {
   return request.get<unknown, DashboardOverview>('/materials/dashboard/overview')
+}
+
+// ---------- 角色配置（T10 补口）----------
+export function getMaterialsRoleMap(): Promise<ModuleRoleMapResult> {
+  return request.get<unknown, ModuleRoleMapResult>('/materials/roles')
+}
+export function grantMaterialsRole(data: GrantRoleParams): Promise<{ id: number }> {
+  return request.post<unknown, { id: number }>('/materials/roles', data)
+}
+export function revokeMaterialsRole(id: number): Promise<{ id: number }> {
+  return request.post<unknown, { id: number }>(`/materials/roles/${id}/revoke`)
 }

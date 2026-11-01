@@ -27,6 +27,10 @@ export interface MaterialModuleRoleMap {
 export interface MaterialsMeResult {
   hasAccess: boolean
   roles: MaterialModuleRoleMap[]
+  /** 平台层级（1-5） */
+  level?: number
+  /** 是否为角色配置可管理身份（平台层级 >= 3） */
+  canManageRoles?: boolean
 }
 
 // ---------- 占位类型（T1 起陆续完善）----------
@@ -309,4 +313,56 @@ export interface DashboardOverview {
   disposeIncome: number
   materialByStatus: Record<string, number>
   pendingApproval: number
+}
+
+// ---------- 角色配置（T10 补口）----------
+export interface ModuleRoleMapRow {
+  id: number
+  userId: number
+  userNo: string
+  userName: string
+  level: number
+  deptName: string
+  role: MaterialModuleRole
+  roleLabel: string
+  unitType: 'workshop' | 'section'
+  unitCode: string
+  unitName: string
+  createdAt: string
+}
+
+export interface RoleCandidate {
+  id: number
+  userNo: string
+  name: string
+  level: number
+  deptCode: string
+  deptName: string
+  status: string
+}
+
+export interface CodeLabel {
+  code: string
+  label: string
+}
+
+export interface ModuleUnitOption {
+  code: string
+  name: string
+}
+
+export interface ModuleRoleMapResult {
+  list: ModuleRoleMapRow[]
+  candidates: RoleCandidate[]
+  units: ModuleUnitOption[]
+  roles: CodeLabel[]
+  unitTypes: CodeLabel[]
+}
+
+export interface GrantRoleParams {
+  userId: number
+  role: MaterialModuleRole
+  unitType: 'workshop' | 'section'
+  unitCode?: string
+  unitName: string
 }

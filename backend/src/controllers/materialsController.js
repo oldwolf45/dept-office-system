@@ -8,7 +8,10 @@ export async function me(req, res) {
   const user = req.currentUser;
   return ok(res, {
     hasAccess: materialsModel.hasModuleAccess(user.id),
-    roles: materialsModel.listModuleRoles(user.id)
+    roles: materialsModel.listModuleRoles(user.id),
+    level: user.role,
+    // 角色配置页入口显隐依据：平台层级 >= 3 才能配（与后端 requireLevel(3) 对齐）
+    canManageRoles: Number(user.role) >= 3
   });
 }
 
@@ -469,4 +472,99 @@ export async function getMonthlySummary(req, res) {
 // GET /api/materials/dashboard/overview —— 首页工作台概览
 export async function getOverview(req, res) {
   return ok(res, materialsModel.overview());
+}
+
+// ============ 角色配置（T10 补口）============
+// 分工：平台管「模块访问权」（module_access），角色归模块（module_role_map）。
+// 这三个接口只解决「谁在材料模块里担任什么角色」，不改平台层级、不建独立账号。
+
+const MATERIAL_ROLES = [
+  { code: 'workshop_director', label: '工段长' },
+  { code: 'workshop_manager', label: '车间主任' },
+  { code: 'supply', label: '供应科' },
+  { code: 'section_agent', label: '科室经办' }
+];
+const UNIT_TYPES = [
+  { code: 'workshop', label: '车间/工段' },
+  { code: 'section', label: '科室' }
+];
+
+// GET /api/materials/roles —— 角色映射列表 + 可授人员 + 角色/单位类型选项
+export async function listRoleMap(req, res) {
+  const candidates = materialsModel.listRoleCandidates();
+  // 单位候选取自现有账号的科室分布，便于直接选；也允许手填（车间/工段可能没建在科室字段里）
+  const units = [];
+  for (const c of candidates) {
+    if (c.deptCode && c.deptName && !units.some((u) => u.code === c.deptCode)) {
+      units.push({ code: c.deptCode, name: c.deptName });
+    }
+  }
+  return ok(res, {
+    list: materialsModel.listModuleRoleMap(),
+    candidates,
+    units,
+    roles: MATERIAL_ROLES,
+    unitTypes: UNIT_TYPES
+  });
+}
+
+// POST /api/materials/roles —— 授予（同人同角色不重复，幂等报错提示）
+export async function createRoleMap(req, res) {
+  const body = req.body || {};
+  const userId = Number(body.userId);
+  const role = String(body.role || '').trim();
+  const unitType = String(body.unitType || '').trim();
+  const unitCode = String(body.unitCode || '').trim();
+  const unitName = String(body.unitName || '').trim();
+
+  if (!userId) return fail(res, 4000, '请选择人员');
+  if (!MATERIAL_ROLES.some((r) => r.code === role)) return fail(res, 4000, '材料模块角色不合法');
+  if (!UNIT_TYPES.some((t) => t.code === unitType)) return fail(res, 4000, '单位类型不合法');
+  if (!unitName) return fail(res, 4000, '请填写单位名称');
+
+  const target = materialsModel.listRoleCandidates().find((c) => c.id === userId);
+  if (!target) return fail(res, 4000, '人员不存在或已停用');
+  if (materialsModel.findModuleRoleByUserRole(userId, role)) {
+    return fail(res, 4000, `${target.name} 已具有该角色，请勿重复授予`);
+  }
+
+  const id = materialsModel.addModuleRole({
+    userId,
+    role,
+    unitType,
+    // 单位编码：未填则用科室编码，仍为空则落名称占位（该字段仅作归属描述，不参与权限判定）
+    unitCode: unitCode || target.deptCode || unitName,
+    unitName,
+    createdBy: req.currentUser.id
+  });
+
+  logModel.addOperationLog({
+    operatorId: req.currentUser.id,
+    operatorName: req.currentUser.name,
+    actionType: 'materials_role_grant',
+    targetType: 'module_role_map',
+    targetId: id,
+    detail: { userId, userNo: target.userNo, userName: target.name, role, unitType, unitName }
+  });
+
+  return ok(res, { id });
+}
+
+// POST /api/materials/roles/:id/revoke —— 撤销（软删）
+export async function revokeRoleMap(req, res) {
+  const id = Number(req.params.id);
+  const row = materialsModel.findModuleRoleById(id);
+  if (!row) return fail(res, 4040, '授权记录不存在或已撤销');
+
+  materialsModel.revokeModuleRole(id);
+  logModel.addOperationLog({
+    operatorId: req.currentUser.id,
+    operatorName: req.currentUser.name,
+    actionType: 'materials_role_revoke',
+    targetType: 'module_role_map',
+    targetId: id,
+    detail: { userId: row.userId, role: row.role, unitName: row.unitName }
+  });
+
+  return ok(res, { id });
 }
