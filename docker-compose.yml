@@ -8,6 +8,10 @@ services:
     environment:
       PORT: "3000"
       DATA_DIR: /app/data
+      # 时区：镜像默认 UTC，不设会导致（1）所有 datetime('now','localtime') 早 8 小时
+      # （2）自动备份窗口 03:00-04:00 实际在北京时间 11 点跑（3）todayDate() 取到 UTC 日期，
+      # 凌晨 0-8 点开的单据编号会用到前一天日期。（镜像自带 zoneinfo，无需装 tzdata）
+      TZ: ${TZ:-Asia/Shanghai}
       # 发行模式：不预置种子账号，0 账号时走网页引导（部署手册要求）。缺省会去 import 私有 seed-data.js 导致启动崩溃
       DISTRIBUTION_MODE: ${DISTRIBUTION_MODE:-1}
       JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me}
@@ -19,6 +23,8 @@ services:
     ports:
       - "8080:80"
       - "8443:443"
+    environment:
+      TZ: ${TZ:-Asia/Shanghai}
     volumes:
       - ./certs:/etc/nginx/certs:ro
     depends_on:
